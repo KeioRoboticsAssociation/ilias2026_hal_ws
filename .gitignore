@@ -1,0 +1,16 @@
+# build output
+build
+CMakeFiles
+.mxproject
+build.ninja
+CMakeCache.txt
+compile_commands.json
+cmake
+cmake_install.cmake
+CLAUDE.md
+request.md
+mavlink_env/
+
+
+# work in progress
+BNO055
