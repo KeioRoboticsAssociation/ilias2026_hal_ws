@@ -139,7 +139,7 @@ public:
     template<typename F>
     auto map(F&& func) -> Result<decltype(func(value_))>;
     template<typename F>
-    auto flatMap(F&& func) -> decltype(func(value_))>;
+    auto flatMap(F&& func) -> decltype(func(value_));
 
     T getOr(const T& defaultValue) const;
 
@@ -223,6 +223,164 @@ namespace Debug {
     static constexpr bool LOGGING_ENABLED = false;
     static constexpr bool ASSERTIONS_ENABLED = false;
 #endif
+}
+
+// ============================================================================
+// Template Implementations
+// ============================================================================
+
+template<typename T>
+Result<T>::Result(T&& val) : hasValue_(true), value_(std::move(val)) {}
+
+template<typename T>
+Result<T>::Result(const T& val) : hasValue_(true), value_(val) {}
+
+template<typename T>
+Result<T>::Result(ErrorCode err) : hasValue_(false), error_(err) {}
+
+template<typename T>
+Result<T>::~Result() {
+    if (hasValue_) {
+        value_.~T();
+    }
+}
+
+template<typename T>
+Result<T>::Result(const Result& other) : hasValue_(other.hasValue_) {
+    if (hasValue_) {
+        new (&value_) T(other.value_);
+    } else {
+        error_ = other.error_;
+    }
+}
+
+template<typename T>
+Result<T>::Result(Result&& other) : hasValue_(other.hasValue_) {
+    if (hasValue_) {
+        new (&value_) T(std::move(other.value_));
+    } else {
+        error_ = other.error_;
+    }
+}
+
+template<typename T>
+bool Result<T>::isOk() const {
+    return hasValue_;
+}
+
+template<typename T>
+bool Result<T>::isError() const {
+    return !hasValue_;
+}
+
+template<typename T>
+T& Result<T>::get() {
+    return value_;
+}
+
+template<typename T>
+const T& Result<T>::get() const {
+    return value_;
+}
+
+template<typename T>
+ErrorCode Result<T>::error() const {
+    return error_;
+}
+
+template<typename T>
+Result<T>::operator bool() const {
+    return hasValue_;
+}
+
+template<typename T>
+T& Result<T>::operator*() {
+    return value_;
+}
+
+template<typename T>
+const T& Result<T>::operator*() const {
+    return value_;
+}
+
+template<typename T>
+template<typename F>
+auto Result<T>::map(F&& func) -> Result<decltype(func(value_))> {
+    if (hasValue_) {
+        return Result<decltype(func(value_))>(func(value_));
+    }
+    return Result<decltype(func(value_))>(error_);
+}
+
+template<typename T>
+template<typename F>
+auto Result<T>::flatMap(F&& func) -> decltype(func(value_)) {
+    if (hasValue_) {
+        return func(value_);
+    }
+    return decltype(func(value_))(error_);
+}
+
+template<typename T>
+T Result<T>::getOr(const T& defaultValue) const {
+    return hasValue_ ? value_ : defaultValue;
+}
+
+template<typename T>
+ErrorSeverity Result<T>::getSeverity() const {
+    return ErrorUtils::getSeverity(error_);
+}
+
+template<typename T>
+ErrorCategory Result<T>::getCategory() const {
+    return ErrorUtils::getCategory(error_);
+}
+
+template<typename T>
+const char* Result<T>::getDescription() const {
+    return ErrorUtils::getDescription(error_);
+}
+
+template<typename T>
+bool Result<T>::isRecoverable() const {
+    return ErrorUtils::isRecoverable(error_);
+}
+
+// ResultFactory implementations
+template<typename T>
+Result<T> ResultFactory::success(T&& value) {
+    return Result<T>(std::forward<T>(value));
+}
+
+template<typename T>
+Result<T> ResultFactory::success(const T& value) {
+    return Result<T>(value);
+}
+
+template<typename T>
+Result<T> ResultFactory::error(ErrorCode err) {
+    return Result<T>(err);
+}
+
+// Result<void> specialization implementations
+inline Result<void>::Result() : hasValue_(true), error_(ErrorCode::OK) {}
+
+inline Result<void>::Result(ErrorCode err) : hasValue_(err == ErrorCode::OK), error_(err) {}
+
+inline bool Result<void>::isOk() const {
+    return hasValue_;
+}
+
+inline bool Result<void>::isError() const {
+    return !hasValue_;
+}
+
+inline ErrorCode Result<void>::error() const {
+    return error_;
+}
+
+inline Result<void>::operator bool() const {
+    return hasValue_;
 }
 
 } // namespace Config
