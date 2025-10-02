@@ -63,6 +63,10 @@ Config::Result<Config::ErrorCode> MotorCommandDispatcher::handleMessage(const ma
             return handleManualControl(msg);
         case MAVLINK_MSG_ID_SET_ACTUATOR_CONTROL_TARGET:
             return handleSetActuatorControlTarget(msg);
+        case MAVLINK_MSG_ID_DC_MOTOR_CONTROL:
+            return handleDCMotorControl(msg);
+        case MAVLINK_MSG_ID_ROBOMASTER_MOTOR_CONTROL:
+            return handleRoboMasterMotorControl(msg);
         default:
             return Config::ErrorCode::CONFIG_ERROR; // Unknown message
     }
@@ -77,7 +81,9 @@ Config::Result<Config::ErrorCode> MotorCommandDispatcher::handleMessage(const ma
 bool MotorCommandDispatcher::canHandle(uint32_t msgId) const {
     return msgId == MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE ||
            msgId == MAVLINK_MSG_ID_MANUAL_CONTROL ||
-           msgId == MAVLINK_MSG_ID_SET_ACTUATOR_CONTROL_TARGET;
+           msgId == MAVLINK_MSG_ID_SET_ACTUATOR_CONTROL_TARGET ||
+           msgId == MAVLINK_MSG_ID_DC_MOTOR_CONTROL ||
+           msgId == MAVLINK_MSG_ID_ROBOMASTER_MOTOR_CONTROL;
 }
 
 /**
@@ -186,6 +192,94 @@ Config::Result<Config::ErrorCode> MotorCommandDispatcher::handleSetActuatorContr
         auto command = createMotorCommand(motorId, position, Motors::ControlMode::POSITION);
         motorRegistry_->sendCommand(motorId, command);
     }
+
+    return Config::ErrorCode::OK;
+}
+
+/**
+ * @brief Handles the DC_MOTOR_CONTROL MAVLink message.
+ *
+ * @param msg The MAVLink message.
+ * @return Config::Result<Config::ErrorCode> indicating the result of the operation.
+ */
+Config::Result<Config::ErrorCode> MotorCommandDispatcher::handleDCMotorControl(const mavlink_message_t& msg) {
+    if (!motorRegistry_) {
+        return Config::ErrorCode::NOT_INITIALIZED;
+    }
+
+    mavlink_dc_motor_control_t dc_control;
+    mavlink_msg_dc_motor_control_decode(&msg, &dc_control);
+
+    Motors::ControlMode mode;
+    switch (dc_control.control_mode) {
+        case 0: // PWM/Open Loop
+            mode = Motors::ControlMode::DUTY_CYCLE;
+            break;
+        case 1: // Speed Control
+            mode = Motors::ControlMode::VELOCITY;
+            break;
+        case 2: // Position Control
+            mode = Motors::ControlMode::POSITION;
+            break;
+        case 3: // Disabled
+            mode = Motors::ControlMode::DISABLED;
+            break;
+        default:
+            return Config::ErrorCode::OUT_OF_RANGE;
+    }
+
+    auto command = createMotorCommand(dc_control.motor_id, dc_control.target_value, mode);
+    motorRegistry_->sendCommand(dc_control.motor_id, command);
+
+    return Config::ErrorCode::OK;
+}
+
+/**
+ * @brief Handles the ROBOMASTER_MOTOR_CONTROL MAVLink message.
+ *
+ * @param msg The MAVLink message.
+ * @return Config::Result<Config::ErrorCode> indicating the result of the operation.
+ */
+Config::Result<Config::ErrorCode> MotorCommandDispatcher::handleRoboMasterMotorControl(const mavlink_message_t& msg) {
+    if (!motorRegistry_) {
+        return Config::ErrorCode::NOT_INITIALIZED;
+    }
+
+    mavlink_robomaster_motor_control_t rm_control;
+    mavlink_msg_robomaster_motor_control_decode(&msg, &rm_control);
+
+    Motors::ControlMode mode;
+    switch (rm_control.control_mode) {
+        case 0: // Open Loop
+            mode = Motors::ControlMode::DUTY_CYCLE;
+            break;
+        case 1: // Speed Control
+            mode = Motors::ControlMode::VELOCITY;
+            break;
+        case 2: // Position Control
+            mode = Motors::ControlMode::POSITION;
+            break;
+        case 3: // Disabled
+            mode = Motors::ControlMode::DISABLED;
+            break;
+        case 4: // Duty to Position
+            mode = Motors::ControlMode::POSITION;
+            break;
+        default:
+            return Config::ErrorCode::OUT_OF_RANGE;
+    }
+
+    float targetValue;
+    if (rm_control.control_mode == 1) {
+        targetValue = rm_control.target_speed_rad_s;
+    } else if (rm_control.control_mode == 2 || rm_control.control_mode == 4) {
+        targetValue = rm_control.target_position_rad;
+    } else {
+        targetValue = rm_control.duty_cycle;
+    }
+
+    auto command = createMotorCommand(rm_control.motor_id, targetValue, mode);
+    motorRegistry_->sendCommand(rm_control.motor_id, command);
 
     return Config::ErrorCode::OK;
 }
@@ -898,7 +992,9 @@ void MessageDispatcher::updateRoutes() {
         MAVLINK_MSG_ID_PARAM_REQUEST_READ,
         MAVLINK_MSG_ID_PARAM_SET,
         MAVLINK_MSG_ID_COMMAND_LONG,
-        MAVLINK_MSG_ID_COMMAND_INT
+        MAVLINK_MSG_ID_COMMAND_INT,
+        MAVLINK_MSG_ID_DC_MOTOR_CONTROL,
+        MAVLINK_MSG_ID_ROBOMASTER_MOTOR_CONTROL
     };
 
     for (auto& handler : handlers_) {
