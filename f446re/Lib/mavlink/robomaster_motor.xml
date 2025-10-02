@@ -50,5 +50,31 @@
             <field type="float" name="position_error_rad">Position error in radians (target - current)</field>
             <field type="uint32_t" name="timestamp_ms">Timestamp in milliseconds</field>
         </message>
+
+        <!-- DC Motor Control Command Message -->
+        <message id="12002" name="DC_MOTOR_CONTROL">
+            <description>Control command for DC motor with encoder feedback</description>
+            <field type="uint8_t" name="target_system">System ID</field>
+            <field type="uint8_t" name="target_component">Component ID</field>
+            <field type="uint8_t" name="motor_id">Motor ID (1-255)</field>
+            <field type="uint8_t" name="control_mode">Control mode (0=PWM/Open Loop, 1=Speed Control, 2=Position Control, 3=Disabled)</field>
+            <field type="float" name="target_value">Target value (PWM duty -1.0 to 1.0, speed in rad/s, or position in rad)</field>
+            <field type="float" name="speed_limit_rad_s">Speed limit in rad/s (0 = use motor default limit)</field>
+            <field type="float" name="acceleration_limit_rad_s2">Acceleration limit in rad/s^2 (0 = use motor default limit)</field>
+        </message>
+
+        <!-- DC Motor Status Message -->
+        <message id="12003" name="DC_MOTOR_STATUS">
+            <description>Status feedback from DC motor controller with encoder</description>
+            <field type="uint8_t" name="motor_id">Motor ID (1-255)</field>
+            <field type="uint8_t" name="control_mode">Current control mode (0=PWM, 1=Speed, 2=Position, 3=Disabled)</field>
+            <field type="uint8_t" name="status">Motor status (0=OK, 1=ERROR, 2=TIMEOUT, 3=NOT_INITIALIZED, 4=LIMIT_REACHED)</field>
+            <field type="float" name="position_rad">Current position in radians</field>
+            <field type="float" name="speed_rad_s">Current speed in rad/s</field>
+            <field type="float" name="duty_cycle">Current PWM duty cycle (-1.0 to 1.0)</field>
+            <field type="float" name="position_error_rad">Position error in radians (only valid in position mode)</field>
+            <field type="float" name="target_value">Current target value (depends on control mode)</field>
+            <field type="uint32_t" name="timestamp_ms">Timestamp in milliseconds</field>
+        </message>
     </messages>
 </mavlink>

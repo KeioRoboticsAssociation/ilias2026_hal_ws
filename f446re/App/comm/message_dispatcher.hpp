@@ -5,7 +5,7 @@
 #include "../storage/parameter_storage.hpp"
 
 extern "C" {
-#include "mavlink/c_library_v2/common/mavlink.h"
+#include "mavlink/c_library_v2_custom/robomaster_motor/mavlink.h"
 }
 
 #include <functional>
@@ -106,6 +106,8 @@ private:
     Config::Result<Config::ErrorCode> handleRcChannelsOverride(const mavlink_message_t& msg);
     Config::Result<Config::ErrorCode> handleManualControl(const mavlink_message_t& msg);
     Config::Result<Config::ErrorCode> handleSetActuatorControlTarget(const mavlink_message_t& msg);
+    Config::Result<Config::ErrorCode> handleDCMotorControl(const mavlink_message_t& msg);
+    Config::Result<Config::ErrorCode> handleRoboMasterMotorControl(const mavlink_message_t& msg);
 
     float convertPWMToPosition(uint16_t pwmValue, float minPos = -90.0f, float maxPos = 90.0f);
     Motors::MotorCommand createMotorCommand(uint8_t motorId, float value, Motors::ControlMode mode);
