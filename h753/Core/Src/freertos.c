@@ -29,6 +29,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "../../App/comm/mavlink_udp.h"
+#include "../../App/hal/hardware_manager.h"
+#include "../../App/motors/motor_registry.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +54,9 @@
 // MAVLink UDP handler
 static mavlink_udp_t mavlink_handler;
 
+// Motor system initialized flag
+static bool motors_initialized = false;
+
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
 
@@ -74,6 +79,67 @@ void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handle
       mavlink_heartbeat_t heartbeat;
       mavlink_msg_heartbeat_decode(msg, &heartbeat);
       // Echo back heartbeat or process as needed
+      break;
+    }
+
+    case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
+    {
+      if (!motors_initialized) break;
+
+      // Handle RC channels override for motor control
+      mavlink_rc_channels_override_t rc_override;
+      mavlink_msg_rc_channels_override_decode(msg, &rc_override);
+
+      // Map RC channels to motors (channels 1-8, typically 1000-2000 us PWM)
+      // Channel 1 -> Motor ID 1, Channel 2 -> Motor ID 2, etc.
+      uint16_t channels[8] = {
+        rc_override.chan1_raw, rc_override.chan2_raw, rc_override.chan3_raw,
+        rc_override.chan4_raw, rc_override.chan5_raw, rc_override.chan6_raw,
+        rc_override.chan7_raw, rc_override.chan8_raw
+      };
+
+      for (int i = 0; i < 8; i++) {
+        if (channels[i] == UINT16_MAX || channels[i] == 0) {
+          continue;  // Channel not set
+        }
+
+        motor_command_t cmd = {0};
+        cmd.motor_id = i + 1;  // Motor IDs 1-8
+        cmd.timestamp = HAL_GetTick();
+        cmd.enable = (channels[i] > 900 && channels[i] < 2100);
+
+        // Convert PWM to appropriate control value
+        // For servos: map 1000-2000us to -90 to +90 degrees
+        // For DC motors: map 1000-2000us to -1.0 to +1.0 duty cycle
+        float normalized = (float)(channels[i] - 1500) / 500.0f;  // -1.0 to +1.0
+
+        // Check motor type and set appropriate command
+        motor_controller_t* controller = motor_registry_get(cmd.motor_id);
+        if (controller) {
+          if (controller->type == MOTOR_TYPE_SERVO) {
+            cmd.mode = CONTROL_MODE_POSITION;
+            cmd.target_value = normalized * 90.0f;  // -90 to +90 degrees
+          } else {
+            cmd.mode = CONTROL_MODE_DUTY_CYCLE;
+            cmd.target_value = normalized;  // -1.0 to +1.0
+          }
+
+          motor_registry_send_command(cmd.motor_id, &cmd);
+        }
+      }
+      break;
+    }
+
+    case MAVLINK_MSG_ID_MANUAL_CONTROL:
+    {
+      if (!motors_initialized) break;
+
+      // Handle manual control (joystick-like inputs)
+      mavlink_manual_control_t manual;
+      mavlink_msg_manual_control_decode(msg, &manual);
+
+      // manual.x, manual.y, manual.z, manual.r are normalized -1000 to 1000
+      // Map to motors as needed for your application
       break;
     }
 
@@ -208,14 +274,56 @@ void StartDefaultTask(void const * argument)
     }
   }
 
-  // Variables for heartbeat timing
+  // Initialize hardware manager
+  error_code_t hw_err = hw_manager_init();
+  if (hw_err != ERROR_OK) {
+    // HW manager init failed
+    while(1) {
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      osDelay(50);
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      osDelay(50);
+    }
+  }
+
+  // Initialize motor registry
+  hw_err = motor_registry_init();
+  if (hw_err != ERROR_OK) {
+    // Motor registry init failed
+    while(1) {
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      osDelay(200);
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      osDelay(200);
+    }
+  }
+
+  // Create all motors from configuration
+  // Note: You need to configure timers in CubeMX and register them first
+  // Example: hw_timer_register(1, &htim1); (add htim1, htim2, etc. as extern)
+  hw_err = motor_registry_create_all_motors();
+  if (hw_err == ERROR_OK) {
+    motors_initialized = true;
+  }
+  // Note: If motors fail to initialize, system continues without motor control
+
+  // Variables for timing
   uint32_t last_heartbeat_time = 0;
+  uint32_t last_motor_update_time = 0;
   const uint32_t heartbeat_interval = 1000; // 1 Hz heartbeat
+  const uint32_t motor_update_interval = 10; // 100 Hz motor update
 
   /* Infinite loop */
   for(;;)
   {
     uint32_t current_time = HAL_GetTick();
+
+    // Update motors at 100 Hz
+    if (motors_initialized && (current_time - last_motor_update_time >= motor_update_interval)) {
+      float delta_time = (current_time - last_motor_update_time) / 1000.0f;
+      motor_registry_update_all(delta_time);
+      last_motor_update_time = current_time;
+    }
 
     // Send heartbeat at 1 Hz
     if (current_time - last_heartbeat_time >= heartbeat_interval) {
@@ -223,7 +331,7 @@ void StartDefaultTask(void const * argument)
                                   MAV_TYPE_ONBOARD_CONTROLLER,
                                   MAV_AUTOPILOT_INVALID,
                                   MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                  MAV_STATE_ACTIVE);
+                                  motors_initialized ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY);
       last_heartbeat_time = current_time;
 
       // Toggle LED to indicate heartbeat sent
