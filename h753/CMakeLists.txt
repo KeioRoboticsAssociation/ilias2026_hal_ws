@@ -49,12 +49,21 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     App/comm/mavlink_udp.c
+    App/hal/hardware_manager.c
+    App/motors/servo_controller.c
+    App/motors/dc_controller.c
+    App/motors/robomaster_controller.c
+    App/motors/motor_registry.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    App
     App/comm
+    App/config
+    App/hal
+    App/motors
     Lib/mavlink/c_library_v2
     Lib/mavlink/c_library_v2/common
 )
