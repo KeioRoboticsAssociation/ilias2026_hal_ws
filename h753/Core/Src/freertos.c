@@ -31,6 +31,9 @@
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/motor_registry.h"
+#include "fdcan.h"
+
+extern FDCAN_HandleTypeDef hfdcan1;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -284,6 +287,34 @@ void StartDefaultTask(void const * argument)
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
       osDelay(50);
     }
+  }
+
+  // Register and start FDCAN1 for RoboMaster motors
+  hw_err = hw_can_register(&hfdcan1);
+  if (hw_err != ERROR_OK) {
+    while(1) {
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      osDelay(75);
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      osDelay(75);
+    }
+  }
+
+  // Configure RoboMaster CAN filter (accept 0x201-0x208)
+  FDCAN_FilterTypeDef sFilterConfig;
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x201;
+  sFilterConfig.FilterID2 = 0x208;
+  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
+    Error_Handler();
+  }
+
+  // Start FDCAN peripheral
+  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
+    Error_Handler();
   }
 
   // Initialize motor registry

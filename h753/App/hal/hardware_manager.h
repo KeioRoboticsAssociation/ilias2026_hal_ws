@@ -33,10 +33,10 @@ typedef struct {
 } hw_timer_t;
 
 /**
- * @brief CAN handle wrapper
+ * @brief CAN handle wrapper (FDCAN for STM32H7)
  */
 typedef struct {
-    CAN_HandleTypeDef* hcan;
+    FDCAN_HandleTypeDef* hfdcan;
     bool initialized;
 } hw_can_t;
 
@@ -190,11 +190,11 @@ void hw_gpio_toggle(GPIO_TypeDef* port, uint16_t pin);
  * ============================================================================ */
 
 /**
- * @brief Register CAN handle
- * @param hcan Pointer to HAL CAN handle
+ * @brief Register CAN handle (FDCAN for STM32H7)
+ * @param hfdcan Pointer to HAL FDCAN handle
  * @return Error code
  */
-error_code_t hw_can_register(CAN_HandleTypeDef* hcan);
+error_code_t hw_can_register(FDCAN_HandleTypeDef* hfdcan);
 
 /**
  * @brief Transmit CAN message

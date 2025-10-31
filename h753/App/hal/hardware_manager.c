@@ -247,11 +247,11 @@ void hw_gpio_toggle(GPIO_TypeDef* port, uint16_t pin) {
 }
 
 /* ============================================================================
- * CAN API Implementation
+ * CAN API Implementation (FDCAN for STM32H7)
  * ============================================================================ */
 
-error_code_t hw_can_register(CAN_HandleTypeDef* hcan) {
-    if (!hcan) {
+error_code_t hw_can_register(FDCAN_HandleTypeDef* hfdcan) {
+    if (!hfdcan) {
         return ERROR_INVALID_PARAMETER;
     }
 
@@ -259,14 +259,14 @@ error_code_t hw_can_register(CAN_HandleTypeDef* hcan) {
         return ERROR_ALREADY_INITIALIZED;
     }
 
-    g_hw_manager.can.hcan = hcan;
+    g_hw_manager.can.hfdcan = hfdcan;
     g_hw_manager.can.initialized = true;
 
     return ERROR_OK;
 }
 
 error_code_t hw_can_transmit(uint32_t can_id, const uint8_t* data, uint8_t length) {
-    if (!g_hw_manager.can.initialized || !g_hw_manager.can.hcan) {
+    if (!g_hw_manager.can.initialized || !g_hw_manager.can.hfdcan) {
         return ERROR_NOT_INITIALIZED;
     }
 
@@ -274,16 +274,18 @@ error_code_t hw_can_transmit(uint32_t can_id, const uint8_t* data, uint8_t lengt
         return ERROR_INVALID_PARAMETER;
     }
 
-    CAN_TxHeaderTypeDef tx_header = {0};
-    tx_header.StdId = can_id;
-    tx_header.ExtId = 0;
-    tx_header.IDE = CAN_ID_STD;
-    tx_header.RTR = CAN_RTR_DATA;
-    tx_header.DLC = length;
-    tx_header.TransmitGlobalTime = DISABLE;
+    FDCAN_TxHeaderTypeDef tx_header = {0};
+    tx_header.Identifier = can_id;
+    tx_header.IdType = FDCAN_STANDARD_ID;
+    tx_header.TxFrameType = FDCAN_DATA_FRAME;
+    tx_header.DataLength = length << 16;  // FDCAN_DLC_BYTES_X format
+    tx_header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    tx_header.BitRateSwitch = FDCAN_BRS_OFF;
+    tx_header.FDFormat = FDCAN_CLASSIC_CAN;
+    tx_header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+    tx_header.MessageMarker = 0;
 
-    uint32_t mailbox;
-    if (HAL_CAN_AddTxMessage(g_hw_manager.can.hcan, &tx_header, (uint8_t*)data, &mailbox) != HAL_OK) {
+    if (HAL_FDCAN_AddMessageToTxFifoQ(g_hw_manager.can.hfdcan, &tx_header, (uint8_t*)data) != HAL_OK) {
         return ERROR_HARDWARE_ERROR;
     }
 
@@ -291,9 +293,9 @@ error_code_t hw_can_transmit(uint32_t can_id, const uint8_t* data, uint8_t lengt
 }
 
 bool hw_can_tx_available(void) {
-    if (!g_hw_manager.can.initialized || !g_hw_manager.can.hcan) {
+    if (!g_hw_manager.can.initialized || !g_hw_manager.can.hfdcan) {
         return false;
     }
 
-    return (HAL_CAN_GetTxMailboxesFreeLevel(g_hw_manager.can.hcan) > 0);
+    return (HAL_FDCAN_GetTxFifoFreeLevel(g_hw_manager.can.hfdcan) > 0);
 }

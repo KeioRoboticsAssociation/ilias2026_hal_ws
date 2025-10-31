@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,7 +113,7 @@ typedef struct {
  * ============================================================================ */
 typedef struct {
     uint8_t id;
-    uint8_t can_id;
+    uint16_t can_id;  // Changed to uint16_t to accommodate CAN IDs > 255
 
     // Angle PID
     float angle_kp;
@@ -283,12 +284,13 @@ static const dc_motor_config_t DC_MOTOR_CONFIGS[MAX_DC_MOTORS] = {
 // RoboMaster configurations
 static const robomaster_config_t ROBOMASTER_CONFIGS[MAX_ROBOMASTER] = {
     {
+        // GM6020 Motor #1 (Gimbal motor, voltage control)
         .id = 20,
-        .can_id = 0x201,
+        .can_id = 0x205,         // GM6020 motor 1 feedback ID
         .angle_kp = 0.1f,
         .angle_ki = 0.0f,
         .angle_kd = 0.0f,
-        .speed_kp = 0.5f,
+        .speed_kp = 50.0f,       // Higher gain for GM6020 voltage control (triggers GM6020 detection)
         .speed_ki = 0.1f,
         .speed_kd = 0.0f,
         .max_speed_rad_s = 10.0f,
@@ -296,12 +298,13 @@ static const robomaster_config_t ROBOMASTER_CONFIGS[MAX_ROBOMASTER] = {
         .watchdog_timeout_ms = 500
     },
     {
+        // M3508 Motor #1 (Drive motor, current control) - for future use
         .id = 21,
-        .can_id = 0x202,
+        .can_id = 0x201,         // M3508 motor 1 feedback ID
         .angle_kp = 0.1f,
         .angle_ki = 0.0f,
         .angle_kd = 0.0f,
-        .speed_kp = 0.5f,
+        .speed_kp = 0.5f,        // Lower gain for M3508 current control
         .speed_ki = 0.1f,
         .speed_kd = 0.0f,
         .max_speed_rad_s = 10.0f,

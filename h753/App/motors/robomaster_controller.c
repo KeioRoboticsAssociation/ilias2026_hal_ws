@@ -1,10 +1,72 @@
 /**
  * @file robomaster_controller.c
- * @brief RoboMaster motor controller implementation (simplified for H753)
+ * @brief RoboMaster motor controller implementation (hybrid M3508/GM6020 support)
  */
 
 #include "robomaster_controller.h"
 #include <string.h>
+
+/* ============================================================================
+ * Motor Type Detection Helper
+ * ============================================================================ */
+
+/**
+ * @brief Detect motor type based on CAN ID and configuration
+ * @note GM6020: feedback IDs 0x205-0x20B, voltage control (-30000 to +30000)
+ *       M3508/M2006: feedback IDs 0x201-0x208, current control (-16384 to +16384)
+ */
+static rm_motor_type_t detect_motor_type(uint16_t can_id, const robomaster_config_t* config) {
+    // GM6020 motors typically use higher gains for voltage control
+    // Use speed_kp > 10.0 as heuristic for GM6020 (voltage-based control needs higher gains)
+    if (config->speed_kp > 10.0f) {
+        return RM_TYPE_GM6020;
+    }
+
+    // Default to M3508/M2006 (current control)
+    return RM_TYPE_M3508;
+}
+
+/**
+ * @brief Get control CAN ID based on motor type and feedback ID
+ */
+static uint32_t get_control_can_id(uint16_t feedback_id, rm_motor_type_t motor_type) {
+    if (motor_type == RM_TYPE_GM6020) {
+        // GM6020: 0x1FF for motors 1-4 (0x205-0x208), 0x2FF for motors 5-7 (0x209-0x20B)
+        if (feedback_id >= 0x209 && feedback_id <= 0x20B) {
+            return 0x2FF;
+        } else {
+            return 0x1FF;
+        }
+    } else {
+        // M3508/M2006: 0x200 for motors 1-4 (0x201-0x204), 0x1FF for motors 5-8 (0x205-0x208)
+        if (feedback_id >= 0x201 && feedback_id <= 0x204) {
+            return 0x200;
+        } else {
+            return 0x1FF;
+        }
+    }
+}
+
+/**
+ * @brief Get motor index in CAN message (0-3)
+ */
+static uint8_t get_motor_index(uint16_t feedback_id, rm_motor_type_t motor_type) {
+    if (motor_type == RM_TYPE_GM6020) {
+        // GM6020: 0x205-0x208 → index 0-3, 0x209-0x20B → index 0-2
+        if (feedback_id >= 0x209) {
+            return (feedback_id - 0x209);
+        } else {
+            return (feedback_id - 0x205);
+        }
+    } else {
+        // M3508/M2006: 0x201-0x204 → index 0-3, 0x205-0x208 → index 0-3
+        if (feedback_id >= 0x205) {
+            return (feedback_id - 0x205);
+        } else {
+            return (feedback_id - 0x201);
+        }
+    }
+}
 
 /* ============================================================================
  * Motor Interface Implementation
@@ -16,6 +78,9 @@ static error_code_t rm_initialize(motor_controller_t* controller) {
     }
 
     robomaster_private_t* priv = (robomaster_private_t*)controller->private_data;
+
+    // Detect motor type based on CAN ID and configuration
+    priv->motor_type = detect_motor_type(priv->config.can_id, &priv->config);
 
     // Initialize state
     controller->state.status = ERROR_NOT_INITIALIZED;
@@ -46,9 +111,15 @@ static error_code_t rm_update(motor_controller_t* controller, float delta_time) 
             priv->watchdog_expired = true;
             controller->state.status = ERROR_TIMEOUT;
             controller->state.timeout_count++;
-            // Send zero current command
+
+            // Send zero command (voltage or current depending on motor type)
+            uint32_t control_id = get_control_can_id(priv->config.can_id, priv->motor_type);
+            uint8_t motor_idx = get_motor_index(priv->config.can_id, priv->motor_type);
             uint8_t data[8] = {0};
-            hw_can_transmit(priv->config.can_id, data, 8);
+            // Zero values in the correct position for this motor
+            data[motor_idx * 2] = 0;
+            data[motor_idx * 2 + 1] = 0;
+            hw_can_transmit(control_id, data, 8);
         }
     }
 
@@ -79,35 +150,72 @@ static error_code_t rm_set_command(motor_controller_t* controller, const motor_c
         motor_set_enabled(controller, true);
     }
 
-    // For simplicity, send raw current command
-    // In a full implementation, you would use PID control here
-    int16_t current = 0;
+    // Calculate control value based on motor type
+    int16_t control_value = 0;
 
-    switch (cmd->mode) {
-        case CONTROL_MODE_CURRENT:
-            current = (int16_t)cmd->target_value;
-            break;
+    if (priv->motor_type == RM_TYPE_GM6020) {
+        // GM6020: Voltage control (-30000 to +30000)
+        switch (cmd->mode) {
+            case CONTROL_MODE_CURRENT:
+                // Interpret as voltage directly
+                control_value = (int16_t)cmd->target_value;
+                break;
 
-        case CONTROL_MODE_VELOCITY:
-            // Simple proportional control (would normally use full PID)
-            current = (int16_t)(cmd->target_value * priv->config.speed_kp * 1000.0f);
-            break;
+            case CONTROL_MODE_VELOCITY:
+                // Simple proportional control (voltage output)
+                control_value = (int16_t)(cmd->target_value * priv->config.speed_kp);
+                break;
 
-        default:
-            return ERROR_INVALID_PARAMETER;
+            case CONTROL_MODE_DUTY_CYCLE:
+                // Map -1.0 to 1.0 → -30000 to +30000
+                control_value = (int16_t)(cmd->target_value * 30000.0f);
+                break;
+
+            default:
+                return ERROR_INVALID_PARAMETER;
+        }
+
+        // Constrain voltage for GM6020
+        if (control_value > 30000) control_value = 30000;
+        if (control_value < -30000) control_value = -30000;
+
+    } else {
+        // M3508/M2006: Current control (-16384 to +16384)
+        switch (cmd->mode) {
+            case CONTROL_MODE_CURRENT:
+                control_value = (int16_t)cmd->target_value;
+                break;
+
+            case CONTROL_MODE_VELOCITY:
+                // Simple proportional control (current output)
+                control_value = (int16_t)(cmd->target_value * priv->config.speed_kp * 1000.0f);
+                break;
+
+            case CONTROL_MODE_DUTY_CYCLE:
+                // Map -1.0 to 1.0 → -10000 to +10000 (safe current limit)
+                control_value = (int16_t)(cmd->target_value * 10000.0f);
+                break;
+
+            default:
+                return ERROR_INVALID_PARAMETER;
+        }
+
+        // Constrain current for M3508/M2006
+        if (control_value > 16384) control_value = 16384;
+        if (control_value < -16384) control_value = -16384;
     }
 
-    // Constrain current
-    if (current > 10000) current = 10000;
-    if (current < -10000) current = -10000;
+    // Get control CAN ID and motor index
+    uint32_t control_id = get_control_can_id(priv->config.can_id, priv->motor_type);
+    uint8_t motor_idx = get_motor_index(priv->config.can_id, priv->motor_type);
 
-    // Send CAN command (DJI RoboMaster format)
-    // Note: This is simplified - real implementation would group motors
+    // Build CAN message (8 bytes for up to 4 motors)
+    // Format: [motor1_H, motor1_L, motor2_H, motor2_L, motor3_H, motor3_L, motor4_H, motor4_L]
     uint8_t data[8] = {0};
-    data[0] = (current >> 8) & 0xFF;
-    data[1] = current & 0xFF;
+    data[motor_idx * 2] = (control_value >> 8) & 0xFF;      // High byte
+    data[motor_idx * 2 + 1] = control_value & 0xFF;         // Low byte
 
-    error_code_t err = hw_can_transmit(priv->config.can_id, data, 8);
+    error_code_t err = hw_can_transmit(control_id, data, 8);
     if (err != ERROR_OK) {
         controller->state.status = ERROR_COMM_ERROR;
         return err;
@@ -125,9 +233,13 @@ static error_code_t rm_set_enabled(motor_controller_t* controller, bool enabled)
     robomaster_private_t* priv = (robomaster_private_t*)controller->private_data;
 
     if (!enabled) {
-        // Send zero current
+        // Send zero command (voltage or current)
+        uint32_t control_id = get_control_can_id(priv->config.can_id, priv->motor_type);
+        uint8_t motor_idx = get_motor_index(priv->config.can_id, priv->motor_type);
         uint8_t data[8] = {0};
-        hw_can_transmit(priv->config.can_id, data, 8);
+        data[motor_idx * 2] = 0;
+        data[motor_idx * 2 + 1] = 0;
+        hw_can_transmit(control_id, data, 8);
     }
 
     controller->state.enabled = enabled;
@@ -141,9 +253,13 @@ static void rm_emergency_stop(motor_controller_t* controller) {
 
     robomaster_private_t* priv = (robomaster_private_t*)controller->private_data;
 
-    // Send zero current immediately
+    // Send zero command immediately
+    uint32_t control_id = get_control_can_id(priv->config.can_id, priv->motor_type);
+    uint8_t motor_idx = get_motor_index(priv->config.can_id, priv->motor_type);
     uint8_t data[8] = {0};
-    hw_can_transmit(priv->config.can_id, data, 8);
+    data[motor_idx * 2] = 0;
+    data[motor_idx * 2 + 1] = 0;
+    hw_can_transmit(control_id, data, 8);
 
     controller->state.enabled = false;
     controller->state.status = ERROR_SAFETY_VIOLATION;
@@ -249,8 +365,8 @@ error_code_t robomaster_process_can_message(
 
     robomaster_private_t* priv = (robomaster_private_t*)controller->private_data;
 
-    // Check if this message is for this motor
-    if (can_id != (priv->config.can_id + 0x200)) {  // Standard RoboMaster CAN ID offset
+    // Check if this message is for this motor (feedback ID should match configured CAN ID)
+    if (can_id != priv->config.can_id) {
         return ERROR_INVALID_PARAMETER;
     }
 
@@ -260,10 +376,18 @@ error_code_t robomaster_process_can_message(
     priv->encoder_speed = (int16_t)((data[2] << 8) | data[3]);
     priv->motor_current = (int16_t)((data[4] << 8) | data[5]);
 
-    // Update state
-    controller->state.current_position = (float)priv->encoder_angle * 0.043633f;  // Convert to radians
-    controller->state.current_velocity = (float)priv->encoder_speed * 0.104720f;  // Convert to rad/s
-    controller->state.current_current = (float)priv->motor_current / 1000.0f;      // Convert to A
+    // Update state with appropriate conversion factors
+    if (priv->motor_type == RM_TYPE_GM6020) {
+        // GM6020: 8192 counts/revolution, speed in RPM
+        controller->state.current_position = (float)priv->encoder_angle * (2.0f * 3.14159f / 8192.0f);  // radians
+        controller->state.current_velocity = (float)priv->encoder_speed * (2.0f * 3.14159f / 60.0f);    // rad/s
+        controller->state.current_current = (float)priv->motor_current / 1000.0f;  // mA to A
+    } else {
+        // M3508/M2006: 8192 counts/revolution, speed in RPM
+        controller->state.current_position = (float)priv->encoder_angle * (2.0f * 3.14159f / 8192.0f);  // radians
+        controller->state.current_velocity = (float)priv->encoder_speed * (2.0f * 3.14159f / 60.0f);    // rad/s
+        controller->state.current_current = (float)priv->motor_current / 1000.0f;  // mA to A
+    }
     controller->state.temperature = (float)data[6];
 
     priv->last_can_rx = hw_get_tick();

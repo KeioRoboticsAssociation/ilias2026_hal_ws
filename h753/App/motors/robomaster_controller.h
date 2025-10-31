@@ -14,6 +14,14 @@ extern "C" {
 #endif
 
 /* ============================================================================
+ * RoboMaster Motor Type Detection
+ * ============================================================================ */
+typedef enum {
+    RM_TYPE_M3508,   // M3508 or M2006 (current control, -16384 to +16384)
+    RM_TYPE_GM6020   // GM6020 (voltage control, -30000 to +30000)
+} rm_motor_type_t;
+
+/* ============================================================================
  * RoboMaster Controller Private Data
  * ============================================================================ */
 typedef struct {
@@ -21,6 +29,9 @@ typedef struct {
     uint32_t last_watchdog_reset;
     bool watchdog_expired;
     uint32_t last_can_rx;
+
+    // Motor type (auto-detected based on CAN ID and gains)
+    rm_motor_type_t motor_type;
 
     // PID state
     float angle_integral;
