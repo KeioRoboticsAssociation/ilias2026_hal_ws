@@ -299,3 +299,92 @@ bool hw_can_tx_available(void) {
 
     return (HAL_FDCAN_GetTxFifoFreeLevel(g_hw_manager.can.hfdcan) > 0);
 }
+
+/* ============================================================================
+ * UART/RS485 API Implementation
+ * ============================================================================ */
+
+static inline int uart_id_to_index(uint8_t uart_id) {
+    switch (uart_id) {
+        case 1: return 0;  // USART1
+        case 2: return 1;  // USART2
+        case 6: return 2;  // USART6
+        default: return -1;
+    }
+}
+
+error_code_t hw_uart_register(uint8_t uart_id, UART_HandleTypeDef* huart) {
+    int idx = uart_id_to_index(uart_id);
+    if (idx < 0 || !huart) {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    hw_uart_t* uart = &g_hw_manager.uarts[idx];
+    if (uart->initialized) {
+        return ERROR_ALREADY_INITIALIZED;
+    }
+
+    uart->huart = huart;
+    uart->uart_id = uart_id;
+    uart->initialized = true;
+
+    return ERROR_OK;
+}
+
+error_code_t hw_uart_transmit(uint8_t uart_id, const uint8_t* data, uint16_t size) {
+    int idx = uart_id_to_index(uart_id);
+    if (idx < 0 || !data || size == 0) {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    hw_uart_t* uart = &g_hw_manager.uarts[idx];
+    if (!uart->initialized || !uart->huart) {
+        return ERROR_NOT_INITIALIZED;
+    }
+
+    // Blocking transmit with 100ms timeout
+    if (HAL_UART_Transmit(uart->huart, (uint8_t*)data, size, 100) != HAL_OK) {
+        return ERROR_HARDWARE_ERROR;
+    }
+
+    return ERROR_OK;
+}
+
+error_code_t hw_uart_receive(uint8_t uart_id, uint8_t* data, uint16_t size, uint32_t timeout_ms) {
+    int idx = uart_id_to_index(uart_id);
+    if (idx < 0 || !data || size == 0) {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    hw_uart_t* uart = &g_hw_manager.uarts[idx];
+    if (!uart->initialized || !uart->huart) {
+        return ERROR_NOT_INITIALIZED;
+    }
+
+    // Blocking receive with specified timeout
+    HAL_StatusTypeDef status = HAL_UART_Receive(uart->huart, data, size, timeout_ms);
+    if (status == HAL_TIMEOUT) {
+        return ERROR_TIMEOUT;
+    } else if (status != HAL_OK) {
+        return ERROR_HARDWARE_ERROR;
+    }
+
+    return ERROR_OK;
+}
+
+error_code_t hw_uart_flush(uint8_t uart_id) {
+    int idx = uart_id_to_index(uart_id);
+    if (idx < 0) {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    hw_uart_t* uart = &g_hw_manager.uarts[idx];
+    if (!uart->initialized || !uart->huart) {
+        return ERROR_NOT_INITIALIZED;
+    }
+
+    // Abort any ongoing reception
+    HAL_UART_AbortReceive(uart->huart);
+
+    return ERROR_OK;
+}

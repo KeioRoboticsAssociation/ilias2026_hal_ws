@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/motors/servo_controller.c
     App/motors/dc_controller.c
     App/motors/robomaster_controller.c
+    App/motors/rs485_controller.c
     App/motors/motor_registry.c
 )
 
@@ -65,6 +66,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     App/hal
     App/motors
     Lib/mavlink/c_library_v2
+    Lib/mavlink/c_library_v2/robomaster_motor  # Custom motor messages (includes common)
     Lib/mavlink/c_library_v2/common
 )
 

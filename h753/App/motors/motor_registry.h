@@ -13,6 +13,7 @@
 #include "servo_controller.h"
 #include "dc_controller.h"
 #include "robomaster_controller.h"
+#include "rs485_controller.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,7 @@ typedef struct {
         servo_private_t servo;
         dc_motor_private_t dc_motor;
         robomaster_private_t robomaster;
+        rs485_private_t rs485;
     } private_data;
 } motor_entry_t;
 

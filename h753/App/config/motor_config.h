@@ -38,7 +38,8 @@ typedef enum {
 typedef enum {
     MOTOR_TYPE_SERVO = 0,
     MOTOR_TYPE_DC = 1,
-    MOTOR_TYPE_ROBOMASTER = 2
+    MOTOR_TYPE_ROBOMASTER = 2,
+    MOTOR_TYPE_RS485 = 3
 } motor_type_t;
 
 typedef enum {
@@ -151,12 +152,38 @@ typedef struct {
 } motor_instance_t;
 
 /* ============================================================================
+ * RS485 Motor Configuration (Ikeya MD)
+ * ============================================================================ */
+typedef enum {
+    RS485_MODE_UNKNOWN = 0,
+    RS485_MODE_VELOCITY,    // RPS control (float)
+    RS485_MODE_POSITION     // Count + rotation control (int16 x2)
+} rs485_control_mode_t;
+
+typedef struct {
+    uint8_t id;                         // Motor ID (software, for MAVLink mapping)
+    uint8_t rs485_device_id;            // RS485 device ID (1-8, hardware DIP switch)
+    uint8_t uart_id;                    // UART peripheral ID (1, 2, 6 for USART1/2/6)
+    rs485_control_mode_t control_mode;  // Velocity or Position control
+
+    // Control parameters
+    float max_rps;                      // Maximum RPS (for velocity mode)
+    float max_acceleration_rps2;        // Maximum acceleration
+    int16_t max_count;                  // Maximum count (for position mode)
+    int16_t max_rotation;               // Maximum rotation (for position mode)
+
+    uint32_t watchdog_timeout_ms;       // Command timeout
+    uint8_t retry_count;                // Number of retries on error
+} rs485_config_t;
+
+/* ============================================================================
  * System Configuration
  * ============================================================================ */
 #define MAX_SERVOS          4
 #define MAX_DC_MOTORS       2
 #define MAX_ROBOMASTER      2
-#define MAX_MOTORS          (MAX_SERVOS + MAX_DC_MOTORS + MAX_ROBOMASTER)
+#define MAX_RS485           2
+#define MAX_MOTORS          (MAX_SERVOS + MAX_DC_MOTORS + MAX_ROBOMASTER + MAX_RS485)
 
 #define MAVLINK_SYSTEM_ID   1
 #define MAVLINK_COMPONENT_ID 1
@@ -313,6 +340,36 @@ static const robomaster_config_t ROBOMASTER_CONFIGS[MAX_ROBOMASTER] = {
     }
 };
 
+// RS485 Motor configurations (Ikeya MD)
+static const rs485_config_t RS485_CONFIGS[MAX_RS485] = {
+    {
+        // RS485 Motor #1 (Ikeya MD, velocity control via USART1)
+        .id = 30,
+        .rs485_device_id = 1,         // DIP switch ID (1-8)
+        .uart_id = 1,                 // USART1
+        .control_mode = RS485_MODE_VELOCITY,  // Or RS485_MODE_POSITION
+        .max_rps = 100.0f,            // Maximum 100 RPS
+        .max_acceleration_rps2 = 200.0f,
+        .max_count = 8192,            // Full revolution count
+        .max_rotation = 100,          // ±100 rotations
+        .watchdog_timeout_ms = 1000,
+        .retry_count = 3
+    },
+    {
+        // RS485 Motor #2 (Ikeya MD, position control via USART2)
+        .id = 31,
+        .rs485_device_id = 2,         // DIP switch ID (1-8)
+        .uart_id = 2,                 // USART2
+        .control_mode = RS485_MODE_POSITION,
+        .max_rps = 100.0f,
+        .max_acceleration_rps2 = 200.0f,
+        .max_count = 8192,
+        .max_rotation = 100,
+        .watchdog_timeout_ms = 1000,
+        .retry_count = 3
+    }
+};
+
 /* ============================================================================
  * Motor Instance Mapping to Hardware
  * ============================================================================ */
@@ -335,7 +392,11 @@ static const motor_instance_t MOTOR_INSTANCES[MAX_MOTORS] = {
 
     // RoboMaster on CAN
     {.id = 20, .type = MOTOR_TYPE_ROBOMASTER, .timer_id = 0, .channel = 0, .enabled = true},
-    {.id = 21, .type = MOTOR_TYPE_ROBOMASTER, .timer_id = 0, .channel = 0, .enabled = true}
+    {.id = 21, .type = MOTOR_TYPE_ROBOMASTER, .timer_id = 0, .channel = 0, .enabled = true},
+
+    // RS485 Motors (Ikeya MD)
+    {.id = 30, .type = MOTOR_TYPE_RS485, .timer_id = 0, .channel = 0, .enabled = true},
+    {.id = 31, .type = MOTOR_TYPE_RS485, .timer_id = 0, .channel = 0, .enabled = true}
 };
 
 /* ============================================================================
@@ -379,6 +440,20 @@ static inline const robomaster_config_t* get_robomaster_config(uint8_t id) {
     for (int i = 0; i < MAX_ROBOMASTER; i++) {
         if (ROBOMASTER_CONFIGS[i].id == id) {
             return &ROBOMASTER_CONFIGS[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief Get RS485 configuration by ID
+ * @param id RS485 motor ID
+ * @return Pointer to configuration or NULL if not found
+ */
+static inline const rs485_config_t* get_rs485_config(uint8_t id) {
+    for (int i = 0; i < MAX_RS485; i++) {
+        if (RS485_CONFIGS[i].id == id) {
+            return &RS485_CONFIGS[i];
         }
     }
     return NULL;

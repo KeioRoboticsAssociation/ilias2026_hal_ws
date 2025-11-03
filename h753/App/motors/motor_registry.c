@@ -4,6 +4,7 @@
  */
 
 #include "motor_registry.h"
+#include "rs485_controller.h"
 #include <string.h>
 
 /* ============================================================================
@@ -80,6 +81,15 @@ error_code_t motor_registry_create_all_motors(void) {
                     return ERROR_CONFIG_ERROR;
                 }
                 err = motor_factory_create_robomaster(inst->id, config, entry);
+                break;
+            }
+
+            case MOTOR_TYPE_RS485: {
+                const rs485_config_t* config = get_rs485_config(inst->id);
+                if (!config) {
+                    return ERROR_CONFIG_ERROR;
+                }
+                err = motor_factory_create_rs485(inst->id, config, entry);
                 break;
             }
 
@@ -292,5 +302,31 @@ error_code_t motor_factory_create_robomaster(
     }
 
     entry->type = MOTOR_TYPE_ROBOMASTER;
+    return ERROR_OK;
+}
+
+/* ============================================================================
+ * RS485 Motor Factory Function
+ * ============================================================================ */
+static error_code_t motor_factory_create_rs485(
+    uint8_t id,
+    const rs485_config_t* config,
+    motor_entry_t* entry)
+{
+    if (!config || !entry) {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    error_code_t err = rs485_controller_create(
+        id,
+        config,
+        &entry->controller,
+        &entry->private_data.rs485);
+
+    if (err != ERROR_OK) {
+        return err;
+    }
+
+    entry->type = MOTOR_TYPE_RS485;
     return ERROR_OK;
 }

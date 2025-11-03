@@ -32,8 +32,11 @@
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/motor_registry.h"
 #include "fdcan.h"
+#include "usart.h"
 
 extern FDCAN_HandleTypeDef hfdcan1;
+extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -162,6 +165,26 @@ void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handle
     case MAVLINK_MSG_ID_PARAM_SET:
     {
       // Handle parameter set
+      break;
+    }
+
+    case MAVLINK_MSG_ID_MOTOR_COMMAND:
+    {
+      if (!motors_initialized) break;
+
+      // Handle generic motor command for RS485 and extended motor IDs
+      mavlink_motor_command_t motor_cmd_msg;
+      mavlink_msg_motor_command_decode(msg, &motor_cmd_msg);
+
+      motor_command_t cmd = {0};
+      cmd.motor_id = motor_cmd_msg.motor_id;
+      cmd.mode = (control_mode_t)motor_cmd_msg.control_mode;
+      cmd.target_value = motor_cmd_msg.target_value;
+      cmd.enable = motor_cmd_msg.enable;
+      cmd.timestamp = HAL_GetTick();
+
+      // Send command to motor registry
+      motor_registry_send_command(cmd.motor_id, &cmd);
       break;
     }
 
@@ -315,6 +338,27 @@ void StartDefaultTask(void const * argument)
   // Start FDCAN peripheral
   if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
     Error_Handler();
+  }
+
+  // Register UART handles for RS485 motors
+  hw_err = hw_uart_register(1, &huart1);  // USART1
+  if (hw_err != ERROR_OK) {
+    while(1) {
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      osDelay(60);
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      osDelay(60);
+    }
+  }
+
+  hw_err = hw_uart_register(2, &huart2);  // USART2
+  if (hw_err != ERROR_OK) {
+    while(1) {
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      osDelay(60);
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      osDelay(60);
+    }
   }
 
   // Initialize motor registry

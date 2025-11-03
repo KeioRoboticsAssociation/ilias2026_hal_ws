@@ -12,7 +12,7 @@ extern "C" {
 
 #include "lwip/udp.h"
 #include "lwip/pbuf.h"
-#include "common/mavlink.h"
+#include "robomaster_motor/mavlink.h"  // Use robomaster_motor dialect (includes common + custom messages)
 #include <stdint.h>
 #include <stdbool.h>
 
