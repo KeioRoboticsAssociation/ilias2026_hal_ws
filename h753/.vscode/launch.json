@@ -1,15 +1,41 @@
 {
-    // IntelliSense を使用して利用可能な属性を学べます。
-    // 既存の属性の説明をホバーして表示します。
-    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
         {
+            "name": "Debug with ST-Link (Simple)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "stlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/H753UDP.elf",
+            "device": "STM32H753ZI",
+            "interface": "swd",
+            "serialNumber": "",
+            "runToEntryPoint": "main",
+            "svdFile": "${env:HOME}/.config/STMicroelectronics/STM32CubeMX/db/mcu/STM32H753ZITx.svd",
+            "preLaunchTask": "CMake: Build",
+            "swoConfig": {
+                "enabled": false
+            }
+        },
+        {
+            "name": "Attach (No Flash)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "stlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/H753UDP.elf",
+            "device": "STM32H753ZI",
+            "interface": "swd",
+            "svdFile": "${env:HOME}/.config/STMicroelectronics/STM32CubeMX/db/mcu/STM32H753ZITx.svd",
+            "swoConfig": {
+                "enabled": false
+            }
+        },
+        {
+            "name": "STM32Cube: STM32 Launch ST-Link GDB Server (Legacy)",
             "type": "stlinkgdbtarget",
             "request": "launch",
-            "name": "STM32Cube: STM32 Launch ST-Link GDB Server",
-            "origin": "snippet",
             "cwd": "${workspaceFolder}",
             "preBuild": "${command:st-stm32-ide-debug-launch.build}",
             "runEntry": "main",

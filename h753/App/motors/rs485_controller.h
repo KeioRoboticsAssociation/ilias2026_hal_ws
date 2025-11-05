@@ -32,15 +32,6 @@ extern "C" {
 #define RS485_MAX_RETRIES               3
 
 /* ============================================================================
- * RS485 Motor Control Modes
- * ============================================================================ */
-typedef enum {
-    RS485_MODE_UNKNOWN = 0,
-    RS485_MODE_VELOCITY,    // RPS control (float)
-    RS485_MODE_POSITION     // Count + rotation control (int16 x2)
-} rs485_control_mode_t;
-
-/* ============================================================================
  * RS485 Protocol Packets
  * ============================================================================ */
 
@@ -84,24 +75,6 @@ typedef struct __attribute__((packed)) {
     int16_t target_rotation; // Target rotation
     uint16_t crc;       // CRC-16 Modbus (little-endian)
 } rs485_position_write_t;
-
-/* ============================================================================
- * RS485 Motor Configuration
- * ============================================================================ */
-typedef struct {
-    uint8_t id;                         // RS485 device ID (1-8)
-    uint8_t uart_id;                    // UART peripheral ID (1-8 for USART1-8)
-    rs485_control_mode_t control_mode;  // Velocity or Position control
-
-    // Control parameters
-    float max_rps;                      // Maximum RPS (for velocity mode)
-    float max_acceleration_rps2;        // Maximum acceleration
-    int16_t max_count;                  // Maximum count (for position mode)
-    int16_t max_rotation;               // Maximum rotation (for position mode)
-
-    uint32_t watchdog_timeout_ms;       // Command timeout
-    uint8_t retry_count;                // Number of retries on error
-} rs485_config_t;
 
 /* ============================================================================
  * RS485 Controller Private Data

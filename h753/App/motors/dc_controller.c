@@ -39,7 +39,6 @@ static error_code_t dc_motor_initialize(motor_controller_t* controller) {
     }
 
     // Set to zero initially
-    uint32_t period = hw_timer_get_period(priv->timer_id);
     hw_timer_set_pwm(priv->timer_id, priv->channel, 0);
 
     controller->state.status = ERROR_OK;

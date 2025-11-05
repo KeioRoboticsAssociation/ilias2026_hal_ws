@@ -308,7 +308,7 @@ error_code_t motor_factory_create_robomaster(
 /* ============================================================================
  * RS485 Motor Factory Function
  * ============================================================================ */
-static error_code_t motor_factory_create_rs485(
+error_code_t motor_factory_create_rs485(
     uint8_t id,
     const rs485_config_t* config,
     motor_entry_t* entry)

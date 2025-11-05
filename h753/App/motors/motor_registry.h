@@ -173,6 +173,18 @@ error_code_t motor_factory_create_robomaster(
     const robomaster_config_t* config,
     motor_entry_t* entry);
 
+/**
+ * @brief Create an RS485 motor
+ * @param id Motor ID
+ * @param config RS485 configuration
+ * @param entry Motor entry to populate
+ * @return Error code
+ */
+error_code_t motor_factory_create_rs485(
+    uint8_t id,
+    const rs485_config_t* config,
+    motor_entry_t* entry);
+
 #ifdef __cplusplus
 }
 #endif
