@@ -28,6 +28,7 @@
 #include "lwip/udp.h"
 #include <string.h>
 #include <stdio.h>
+#include "stm32h7xx_nucleo.h"
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/motor_registry.h"
@@ -266,18 +267,18 @@ void StartDefaultTask(void const * argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN StartDefaultTask */
-  // LED startup sequence
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-  osDelay(100);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-  osDelay(100);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-  osDelay(100);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-  osDelay(100);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-  osDelay(100);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  // Initialize BSP LEDs
+  BSP_LED_Init(LED1);  // Green LED
+  BSP_LED_Init(LED2);  // Blue LED
+  BSP_LED_Init(LED3);  // Red LED
+
+  // LED startup sequence - 3 blinks on LED1 (Green)
+  for (int i = 0; i < 3; i++) {
+    BSP_LED_On(LED1);
+    osDelay(100);
+    BSP_LED_Off(LED1);
+    osDelay(100);
+  }
 
   // Configure MAVLink UDP
   mavlink_udp_config_t config;
@@ -291,11 +292,15 @@ void StartDefaultTask(void const * argument)
   err_t err = mavlink_udp_init(&mavlink_handler, &config, mavlink_message_handler);
 
   if (err != ERR_OK) {
-    // Initialization failed, blink LED rapidly to indicate error
+    // Initialization failed, blink all LEDs rapidly to indicate error
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED1);
+      BSP_LED_On(LED2);
+      BSP_LED_On(LED3);
       osDelay(100);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED1);
+      BSP_LED_Off(LED2);
+      BSP_LED_Off(LED3);
       osDelay(100);
     }
   }
@@ -303,11 +308,11 @@ void StartDefaultTask(void const * argument)
   // Initialize hardware manager
   error_code_t hw_err = hw_manager_init();
   if (hw_err != ERROR_OK) {
-    // HW manager init failed
+    // HW manager init failed - blink RED LED rapidly
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED3);
       osDelay(50);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED3);
       osDelay(50);
     }
   }
@@ -315,11 +320,14 @@ void StartDefaultTask(void const * argument)
   // Register and start FDCAN1 for RoboMaster motors
   hw_err = hw_can_register(&hfdcan1);
   if (hw_err != ERROR_OK) {
+    // CAN registration failed - blink RED and GREEN alternately
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED3);
       osDelay(75);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED3);
+      BSP_LED_On(LED1);
       osDelay(75);
+      BSP_LED_Off(LED1);
     }
   }
 
@@ -343,20 +351,24 @@ void StartDefaultTask(void const * argument)
   // Register UART handles for RS485 motors
   hw_err = hw_uart_register(1, &huart1);  // USART1
   if (hw_err != ERROR_OK) {
+    // UART1 registration failed - blink BLUE LED
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED2);
       osDelay(60);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED2);
       osDelay(60);
     }
   }
 
   hw_err = hw_uart_register(2, &huart2);  // USART2
   if (hw_err != ERROR_OK) {
+    // UART2 registration failed - blink BLUE and RED LEDs
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED2);
+      BSP_LED_On(LED3);
       osDelay(60);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED2);
+      BSP_LED_Off(LED3);
       osDelay(60);
     }
   }
@@ -364,11 +376,11 @@ void StartDefaultTask(void const * argument)
   // Initialize motor registry
   hw_err = motor_registry_init();
   if (hw_err != ERROR_OK) {
-    // Motor registry init failed
+    // Motor registry init failed - slow blink RED LED
     while(1) {
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      BSP_LED_On(LED3);
       osDelay(200);
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      BSP_LED_Off(LED3);
       osDelay(200);
     }
   }
@@ -409,8 +421,8 @@ void StartDefaultTask(void const * argument)
                                   motors_initialized ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY);
       last_heartbeat_time = current_time;
 
-      // Toggle LED to indicate heartbeat sent
-      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
+      // Toggle GREEN LED to indicate heartbeat sent
+      BSP_LED_Toggle(LED1);
     }
 
     // Process other tasks here...
