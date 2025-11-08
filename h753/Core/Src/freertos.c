@@ -32,6 +32,7 @@
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/motor_registry.h"
+#include "../../App/config/parameter_manager.h"
 #include "fdcan.h"
 #include "usart.h"
 
@@ -152,20 +153,103 @@ void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handle
 
     case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
     {
-      // Handle parameter request list
-      // Send back parameter list if needed
+      // Handle parameter request list - send all parameters
+      uint16_t param_count = param_manager_get_count();
+
+      for (uint16_t i = 0; i < param_count; i++) {
+        const param_entry_t* param = param_manager_get_by_index(i);
+        if (param) {
+          mavlink_message_t response;
+          mavlink_msg_param_value_pack(
+            handler->config.system_id,
+            handler->config.component_id,
+            &response,
+            param->name,
+            *(param->value_ptr),
+            MAV_PARAM_TYPE_REAL32,
+            param_count,
+            i
+          );
+          mavlink_udp_send_message(handler, &response);
+
+          // Small delay to avoid flooding the network
+          osDelay(5);
+        }
+      }
       break;
     }
 
     case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
     {
-      // Handle parameter request read
+      // Handle parameter request read - send specific parameter
+      mavlink_param_request_read_t req;
+      mavlink_msg_param_request_read_decode(msg, &req);
+
+      const param_entry_t* param = NULL;
+
+      // Check if request is by index or by name
+      if (req.param_index >= 0) {
+        param = param_manager_get_by_index((uint16_t)req.param_index);
+      } else {
+        // Request by name
+        char param_name[17] = {0};
+        strncpy(param_name, req.param_id, 16);
+        param = param_manager_get_by_name(param_name);
+      }
+
+      if (param) {
+        mavlink_message_t response;
+        uint16_t param_count = param_manager_get_count();
+        int16_t param_index = param_manager_get_index_by_name(param->name);
+
+        mavlink_msg_param_value_pack(
+          handler->config.system_id,
+          handler->config.component_id,
+          &response,
+          param->name,
+          *(param->value_ptr),
+          MAV_PARAM_TYPE_REAL32,
+          param_count,
+          param_index
+        );
+        mavlink_udp_send_message(handler, &response);
+      }
       break;
     }
 
     case MAVLINK_MSG_ID_PARAM_SET:
     {
-      // Handle parameter set
+      // Handle parameter set - update parameter value
+      mavlink_param_set_t set_req;
+      mavlink_msg_param_set_decode(msg, &set_req);
+
+      char param_name[17] = {0};
+      strncpy(param_name, set_req.param_id, 16);
+
+      // Attempt to set parameter
+      error_code_t err = param_manager_set(param_name, set_req.param_value);
+
+      // Always send back the current value (MAVLink protocol requirement)
+      const param_entry_t* param = param_manager_get_by_name(param_name);
+      if (param) {
+        mavlink_message_t response;
+        uint16_t param_count = param_manager_get_count();
+        int16_t param_index = param_manager_get_index_by_name(param->name);
+
+        mavlink_msg_param_value_pack(
+          handler->config.system_id,
+          handler->config.component_id,
+          &response,
+          param->name,
+          *(param->value_ptr),  // Send actual current value (may be clamped)
+          MAV_PARAM_TYPE_REAL32,
+          param_count,
+          param_index
+        );
+        mavlink_udp_send_message(handler, &response);
+      }
+
+      (void)err;  // Suppress unused warning
       break;
     }
 
@@ -393,6 +477,17 @@ void StartDefaultTask(void const * argument)
     motors_initialized = true;
   }
   // Note: If motors fail to initialize, system continues without motor control
+
+  // Initialize parameter manager (for PID tuning via MAVLink)
+  hw_err = param_manager_init();
+  if (hw_err == ERROR_OK && motors_initialized) {
+    // Register all motor PID parameters
+    hw_err = param_manager_register_motor_params();
+
+    // Try to load saved parameters from Flash
+    // If no valid data exists, defaults will be used
+    param_manager_load_from_flash();
+  }
 
   // Variables for timing
   uint32_t last_heartbeat_time = 0;

@@ -55,6 +55,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/motors/robomaster_controller.c
     App/motors/rs485_controller.c
     App/motors/motor_registry.c
+    App/config/parameter_manager.c
 )
 
 # Add include paths
