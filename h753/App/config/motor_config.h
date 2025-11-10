@@ -179,10 +179,15 @@ typedef struct {
 /* ============================================================================
  * System Configuration
  * ============================================================================ */
-#define MAX_SERVOS          4
-#define MAX_DC_MOTORS       2
-#define MAX_ROBOMASTER      2
-#define MAX_RS485           2
+// Motor ID Ranges:
+// - Servo motors: IDs 1-9
+// - DC motors: IDs 10-15
+// - RoboMaster motors: IDs 20-29
+// - RS485 motors: IDs 30-49
+#define MAX_SERVOS          9
+#define MAX_DC_MOTORS       6
+#define MAX_ROBOMASTER      10
+#define MAX_RS485           20
 #define MAX_MOTORS          (MAX_SERVOS + MAX_DC_MOTORS + MAX_ROBOMASTER + MAX_RS485)
 
 #define MAVLINK_SYSTEM_ID   1

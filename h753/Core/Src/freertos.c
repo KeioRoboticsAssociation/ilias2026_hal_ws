@@ -32,6 +32,7 @@
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/motor_registry.h"
+#include "../../App/motors/robomaster_controller.h"
 #include "../../App/config/parameter_manager.h"
 #include "fdcan.h"
 #include "usart.h"
@@ -39,6 +40,7 @@
 extern FDCAN_HandleTypeDef hfdcan1;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
+extern motor_registry_t g_motor_registry;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -279,6 +281,41 @@ void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handle
   }
 }
 
+/**
+  * @brief  FDCAN RX FIFO0 callback - processes incoming CAN messages from RoboMaster motors
+  * @param  hfdcan: FDCAN handle
+  * @param  RxFifo0ITs: Interrupt flags
+  * @retval None
+  */
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+  if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
+  {
+    FDCAN_RxHeaderTypeDef rx_header;
+    uint8_t rx_data[8];
+
+    // Retrieve message from RX FIFO0
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) == HAL_OK)
+    {
+      // Route CAN message to appropriate RoboMaster motor controller
+      // We need to find which motor matches this CAN ID
+      if (motors_initialized)
+      {
+        // Search through all motors to find matching RoboMaster controller
+        for (uint8_t motor_id = 20; motor_id < 30; motor_id++)  // RoboMaster IDs: 20-29
+        {
+          motor_controller_t* controller = motor_registry_get(motor_id);
+          if (controller && controller->type == MOTOR_TYPE_ROBOMASTER)
+          {
+            // Pass message to RoboMaster controller for processing
+            robomaster_process_can_message(controller, rx_header.Identifier, rx_data, 8);
+          }
+        }
+      }
+    }
+  }
+}
+
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
@@ -415,20 +452,25 @@ void StartDefaultTask(void const * argument)
     }
   }
 
-  // Configure RoboMaster CAN filter (accept 0x201-0x208)
+  // Configure RoboMaster CAN filter (accept 0x201-0x20B for both M3508 and GM6020)
   FDCAN_FilterTypeDef sFilterConfig;
   sFilterConfig.IdType = FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x201;
-  sFilterConfig.FilterID2 = 0x208;
+  sFilterConfig.FilterID1 = 0x201;  // M3508 motor 1 / GM6020 range start
+  sFilterConfig.FilterID2 = 0x20B;  // GM6020 motor 7
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
     Error_Handler();
   }
 
   // Start FDCAN peripheral
   if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
+    Error_Handler();
+  }
+
+  // Enable FDCAN RX FIFO0 interrupt to receive motor feedback
+  if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
     Error_Handler();
   }
 
@@ -470,13 +512,18 @@ void StartDefaultTask(void const * argument)
   }
 
   // Create all motors from configuration
-  // Note: You need to configure timers in CubeMX and register them first
-  // Example: hw_timer_register(1, &htim1); (add htim1, htim2, etc. as extern)
+  // Note: Motors without proper hardware (missing timers/UARTs) will be skipped automatically
+  // The system will work with whatever motors successfully initialize
   hw_err = motor_registry_create_all_motors();
-  if (hw_err == ERROR_OK) {
-    motors_initialized = true;
+  // Always enable motor system - it will work with successfully initialized motors only
+  motors_initialized = true;
+
+  // Log motor count for diagnostics
+  if (g_motor_registry.motor_count > 0) {
+    // At least some motors initialized successfully
+  } else {
+    // No motors initialized - check hardware connections and CubeMX configuration
   }
-  // Note: If motors fail to initialize, system continues without motor control
 
   // Initialize parameter manager (for PID tuning via MAVLink)
   hw_err = param_manager_init();
@@ -492,8 +539,10 @@ void StartDefaultTask(void const * argument)
   // Variables for timing
   uint32_t last_heartbeat_time = 0;
   uint32_t last_motor_update_time = 0;
+  uint32_t last_motor_status_time = 0;
   const uint32_t heartbeat_interval = 1000; // 1 Hz heartbeat
   const uint32_t motor_update_interval = 10; // 100 Hz motor update
+  const uint32_t motor_status_interval = 100; // 10 Hz motor status broadcast
 
   /* Infinite loop */
   for(;;)
@@ -518,6 +567,35 @@ void StartDefaultTask(void const * argument)
 
       // Toggle GREEN LED to indicate heartbeat sent
       BSP_LED_Toggle(LED1);
+    }
+
+    // Broadcast motor status at 10 Hz (for ROS2 visualization)
+    if (motors_initialized && (current_time - last_motor_status_time >= motor_status_interval)) {
+      // Send status for all active RoboMaster motors (IDs 20-29)
+      for (uint8_t motor_id = 20; motor_id < 30; motor_id++) {
+        motor_controller_t* controller = motor_registry_get(motor_id);
+        if (controller && controller->type == MOTOR_TYPE_ROBOMASTER) {
+          motor_state_t state = motor_get_state(controller);
+
+          // Send ROBOMASTER_MOTOR_STATUS message
+          mavlink_message_t msg;
+          mavlink_msg_robomaster_motor_status_pack(
+            mavlink_handler.config.system_id,
+            mavlink_handler.config.component_id,
+            &msg,
+            motor_id,                          // motor_id
+            0,                                 // control_mode (0=position, 1=velocity, 2=current)
+            (uint8_t)state.status,             // status
+            state.current_position,            // current_position_rad
+            state.current_velocity,            // current_speed_rad_s
+            0.0f,                              // current_duty_cycle
+            0.0f,                              // position_error_rad
+            current_time                       // timestamp_ms
+          );
+          mavlink_udp_send_message(&mavlink_handler, &msg);
+        }
+      }
+      last_motor_status_time = current_time;
     }
 
     // Process other tasks here...

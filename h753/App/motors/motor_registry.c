@@ -98,13 +98,15 @@ error_code_t motor_registry_create_all_motors(void) {
         }
 
         if (err != ERROR_OK) {
-            return err;
+            // Motor creation failed - skip this motor and continue with others
+            continue;
         }
 
         // Initialize the motor
         err = motor_initialize(&entry->controller);
         if (err != ERROR_OK) {
-            return err;
+            // Motor initialization failed - skip this motor and continue with others
+            continue;
         }
 
         entry->allocated = true;
