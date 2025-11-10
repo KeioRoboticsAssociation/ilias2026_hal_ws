@@ -2,3 +2,6 @@ build
 mx.scratch
 !.settings
 .prompt/
+
+# Portable MAVLink HAL - user-specific config (use template instead)
+Lib/mavlink_hal/include/mavlink_hal_config.h

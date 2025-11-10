@@ -1,0 +1,433 @@
+/**
+ * @file mavlink_hal_config.h
+ * @brief Configuration template for MAVLink HAL
+ *
+ * Copy this file to your project and rename it to mavlink_hal_config.h
+ * Customize the settings below for your specific platform and requirements.
+ *
+ * @author Auto-generated for Epic1 Task1
+ * @date 2025-11-10
+ */
+
+#ifndef MAVLINK_HAL_CONFIG_H
+#define MAVLINK_HAL_CONFIG_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ============================================================================
+ * Platform Selection
+ * ============================================================================ */
+
+/**
+ * Uncomment ONE of the following to select your target platform
+ * Or define the platform macro in your build system (recommended)
+ */
+
+/* #define MAVLINK_HAL_PLATFORM_STM32 */
+/* #define MAVLINK_HAL_PLATFORM_ARDUINO */
+/* #define MAVLINK_HAL_PLATFORM_ESP32 */
+/* #define MAVLINK_HAL_PLATFORM_LINUX */
+
+/* ============================================================================
+ * Feature Enable/Disable
+ * ============================================================================ */
+
+/**
+ * Enable optional features by uncommenting the corresponding defines
+ */
+
+/* CAN bus support */
+/* #define MAVLINK_HAL_ENABLE_CAN */
+
+/* SPI bus support */
+/* #define MAVLINK_HAL_ENABLE_SPI */
+
+/* I2C bus support */
+/* #define MAVLINK_HAL_ENABLE_I2C */
+
+/* Mutex/thread safety support */
+/* #define MAVLINK_HAL_ENABLE_MUTEX */
+
+/* Debug logging support */
+/* #define MAVLINK_HAL_ENABLE_DEBUG */
+
+/* DMA support for UART operations */
+/* #define MAVLINK_HAL_ENABLE_DMA */
+
+/* ============================================================================
+ * UART Configuration
+ * ============================================================================ */
+
+/**
+ * Default UART buffer sizes
+ * Adjust based on your application's throughput requirements
+ */
+#ifndef MAVLINK_HAL_UART_RX_BUFFER_SIZE
+#define MAVLINK_HAL_UART_RX_BUFFER_SIZE     512
+#endif
+
+#ifndef MAVLINK_HAL_UART_TX_BUFFER_SIZE
+#define MAVLINK_HAL_UART_TX_BUFFER_SIZE     512
+#endif
+
+/**
+ * Default UART timeout (milliseconds)
+ */
+#ifndef MAVLINK_HAL_UART_DEFAULT_TIMEOUT_MS
+#define MAVLINK_HAL_UART_DEFAULT_TIMEOUT_MS 1000
+#endif
+
+/**
+ * Maximum number of UART instances
+ */
+#ifndef MAVLINK_HAL_MAX_UART_INSTANCES
+#define MAVLINK_HAL_MAX_UART_INSTANCES      4
+#endif
+
+/* ============================================================================
+ * GPIO Configuration
+ * ============================================================================ */
+
+/**
+ * Maximum number of GPIO pins with interrupt capability
+ */
+#ifndef MAVLINK_HAL_MAX_GPIO_IRQ_PINS
+#define MAVLINK_HAL_MAX_GPIO_IRQ_PINS       16
+#endif
+
+/* ============================================================================
+ * Timer Configuration
+ * ============================================================================ */
+
+/**
+ * Timer tick resolution (microseconds)
+ * Lower values provide better precision but may increase overhead
+ */
+#ifndef MAVLINK_HAL_TIMER_TICK_US
+#define MAVLINK_HAL_TIMER_TICK_US           1
+#endif
+
+/**
+ * Maximum number of software timers
+ */
+#ifndef MAVLINK_HAL_MAX_TIMERS
+#define MAVLINK_HAL_MAX_TIMERS              8
+#endif
+
+/* ============================================================================
+ * PWM Configuration
+ * ============================================================================ */
+
+/**
+ * Default PWM frequency (Hz)
+ */
+#ifndef MAVLINK_HAL_PWM_DEFAULT_FREQ_HZ
+#define MAVLINK_HAL_PWM_DEFAULT_FREQ_HZ     50
+#endif
+
+/**
+ * Default PWM resolution (bits)
+ */
+#ifndef MAVLINK_HAL_PWM_DEFAULT_RESOLUTION
+#define MAVLINK_HAL_PWM_DEFAULT_RESOLUTION  12
+#endif
+
+/**
+ * Maximum number of PWM channels
+ */
+#ifndef MAVLINK_HAL_MAX_PWM_CHANNELS
+#define MAVLINK_HAL_MAX_PWM_CHANNELS        16
+#endif
+
+/* ============================================================================
+ * ADC Configuration
+ * ============================================================================ */
+
+/**
+ * Default ADC resolution (bits)
+ */
+#ifndef MAVLINK_HAL_ADC_DEFAULT_RESOLUTION
+#define MAVLINK_HAL_ADC_DEFAULT_RESOLUTION  12
+#endif
+
+/**
+ * Default ADC reference voltage (V)
+ */
+#ifndef MAVLINK_HAL_ADC_DEFAULT_VREF
+#define MAVLINK_HAL_ADC_DEFAULT_VREF        3.3f
+#endif
+
+/**
+ * Default ADC sampling time (microseconds)
+ */
+#ifndef MAVLINK_HAL_ADC_DEFAULT_SAMPLING_US
+#define MAVLINK_HAL_ADC_DEFAULT_SAMPLING_US 10
+#endif
+
+/**
+ * Maximum number of ADC channels
+ */
+#ifndef MAVLINK_HAL_MAX_ADC_CHANNELS
+#define MAVLINK_HAL_MAX_ADC_CHANNELS        16
+#endif
+
+/* ============================================================================
+ * CAN Configuration (if enabled)
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_ENABLE_CAN
+
+/**
+ * Default CAN baudrate
+ */
+#ifndef MAVLINK_HAL_CAN_DEFAULT_BAUDRATE
+#define MAVLINK_HAL_CAN_DEFAULT_BAUDRATE    500000
+#endif
+
+/**
+ * CAN TX FIFO depth
+ */
+#ifndef MAVLINK_HAL_CAN_TX_FIFO_DEPTH
+#define MAVLINK_HAL_CAN_TX_FIFO_DEPTH       8
+#endif
+
+/**
+ * CAN RX FIFO depth
+ */
+#ifndef MAVLINK_HAL_CAN_RX_FIFO_DEPTH
+#define MAVLINK_HAL_CAN_RX_FIFO_DEPTH       32
+#endif
+
+/**
+ * Maximum number of CAN instances
+ */
+#ifndef MAVLINK_HAL_MAX_CAN_INSTANCES
+#define MAVLINK_HAL_MAX_CAN_INSTANCES       2
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_CAN */
+
+/* ============================================================================
+ * SPI Configuration (if enabled)
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_ENABLE_SPI
+
+/**
+ * Default SPI clock speed (Hz)
+ */
+#ifndef MAVLINK_HAL_SPI_DEFAULT_CLOCK_HZ
+#define MAVLINK_HAL_SPI_DEFAULT_CLOCK_HZ    1000000
+#endif
+
+/**
+ * Maximum number of SPI instances
+ */
+#ifndef MAVLINK_HAL_MAX_SPI_INSTANCES
+#define MAVLINK_HAL_MAX_SPI_INSTANCES       3
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_SPI */
+
+/* ============================================================================
+ * I2C Configuration (if enabled)
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_ENABLE_I2C
+
+/**
+ * Default I2C clock speed (Hz)
+ */
+#ifndef MAVLINK_HAL_I2C_DEFAULT_CLOCK_HZ
+#define MAVLINK_HAL_I2C_DEFAULT_CLOCK_HZ    100000
+#endif
+
+/**
+ * Maximum number of I2C instances
+ */
+#ifndef MAVLINK_HAL_MAX_I2C_INSTANCES
+#define MAVLINK_HAL_MAX_I2C_INSTANCES       2
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_I2C */
+
+/* ============================================================================
+ * Debug Configuration (if enabled)
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_ENABLE_DEBUG
+
+/**
+ * Debug message buffer size
+ */
+#ifndef MAVLINK_HAL_DEBUG_BUFFER_SIZE
+#define MAVLINK_HAL_DEBUG_BUFFER_SIZE       256
+#endif
+
+/**
+ * Debug output level
+ * 0 = Errors only
+ * 1 = Errors + Warnings
+ * 2 = Errors + Warnings + Info
+ * 3 = All messages (including debug)
+ */
+#ifndef MAVLINK_HAL_DEBUG_LEVEL
+#define MAVLINK_HAL_DEBUG_LEVEL             2
+#endif
+
+/**
+ * Enable function name in debug messages
+ */
+#ifndef MAVLINK_HAL_DEBUG_SHOW_FUNCTION
+#define MAVLINK_HAL_DEBUG_SHOW_FUNCTION     1
+#endif
+
+/**
+ * Enable line numbers in debug messages
+ */
+#ifndef MAVLINK_HAL_DEBUG_SHOW_LINE
+#define MAVLINK_HAL_DEBUG_SHOW_LINE         1
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_DEBUG */
+
+/* ============================================================================
+ * Thread Safety Configuration (if enabled)
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_ENABLE_MUTEX
+
+/**
+ * Default mutex timeout (milliseconds)
+ */
+#ifndef MAVLINK_HAL_MUTEX_DEFAULT_TIMEOUT_MS
+#define MAVLINK_HAL_MUTEX_DEFAULT_TIMEOUT_MS    1000
+#endif
+
+/**
+ * Maximum number of mutexes
+ */
+#ifndef MAVLINK_HAL_MAX_MUTEXES
+#define MAVLINK_HAL_MAX_MUTEXES                 16
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_MUTEX */
+
+/* ============================================================================
+ * Memory Configuration
+ * ============================================================================ */
+
+/**
+ * Enable static memory allocation only (no malloc/free)
+ */
+#ifndef MAVLINK_HAL_STATIC_MEMORY_ONLY
+#define MAVLINK_HAL_STATIC_MEMORY_ONLY      1
+#endif
+
+/**
+ * Stack size for callback handlers (bytes)
+ */
+#ifndef MAVLINK_HAL_CALLBACK_STACK_SIZE
+#define MAVLINK_HAL_CALLBACK_STACK_SIZE     2048
+#endif
+
+/* ============================================================================
+ * Performance Tuning
+ * ============================================================================ */
+
+/**
+ * Enable interrupt-safe operations
+ * This may reduce performance but ensures thread safety
+ */
+#ifndef MAVLINK_HAL_INTERRUPT_SAFE
+#define MAVLINK_HAL_INTERRUPT_SAFE          1
+#endif
+
+/**
+ * Enable inline optimizations
+ */
+#ifndef MAVLINK_HAL_ENABLE_INLINE
+#define MAVLINK_HAL_ENABLE_INLINE           1
+#endif
+
+/**
+ * Enable compile-time assertions
+ */
+#ifndef MAVLINK_HAL_ENABLE_STATIC_ASSERT
+#define MAVLINK_HAL_ENABLE_STATIC_ASSERT    1
+#endif
+
+/* ============================================================================
+ * Platform-Specific Configuration
+ * ============================================================================ */
+
+#ifdef MAVLINK_HAL_PLATFORM_STM32
+    /**
+     * STM32-specific: Enable HAL driver integration
+     */
+    #define MAVLINK_HAL_STM32_USE_HAL_DRIVER    1
+
+    /**
+     * STM32-specific: Enable DMA for UART
+     */
+    #define MAVLINK_HAL_STM32_UART_USE_DMA      1
+
+    /**
+     * STM32-specific: Enable hardware CRC
+     */
+    #define MAVLINK_HAL_STM32_USE_HW_CRC        1
+#endif
+
+#ifdef MAVLINK_HAL_PLATFORM_ARDUINO
+    /**
+     * Arduino-specific: Default serial baud rate
+     */
+    #define MAVLINK_HAL_ARDUINO_DEFAULT_BAUD    115200
+
+    /**
+     * Arduino-specific: Enable software serial
+     */
+    #define MAVLINK_HAL_ARDUINO_SW_SERIAL       0
+#endif
+
+#ifdef MAVLINK_HAL_PLATFORM_ESP32
+    /**
+     * ESP32-specific: FreeRTOS priority for HAL tasks
+     */
+    #define MAVLINK_HAL_ESP32_TASK_PRIORITY     5
+
+    /**
+     * ESP32-specific: Core affinity (0, 1, or -1 for any)
+     */
+    #define MAVLINK_HAL_ESP32_CORE_AFFINITY     1
+
+    /**
+     * ESP32-specific: Enable LEDC for PWM
+     */
+    #define MAVLINK_HAL_ESP32_USE_LEDC          1
+#endif
+
+/* ============================================================================
+ * Validation
+ * ============================================================================ */
+
+/* Compile-time checks */
+#if MAVLINK_HAL_ENABLE_STATIC_ASSERT
+
+#if MAVLINK_HAL_UART_RX_BUFFER_SIZE < 64
+    #error "UART RX buffer too small (minimum 64 bytes)"
+#endif
+
+#if MAVLINK_HAL_PWM_DEFAULT_RESOLUTION > 16
+    #error "PWM resolution exceeds 16 bits"
+#endif
+
+#endif /* MAVLINK_HAL_ENABLE_STATIC_ASSERT */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* MAVLINK_HAL_CONFIG_H */

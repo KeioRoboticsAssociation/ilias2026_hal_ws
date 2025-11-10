@@ -56,6 +56,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/motors/rs485_controller.c
     App/motors/motor_registry.c
     App/config/parameter_manager.c
+
+    # Portable MAVLink HAL (Epic1 Task1)
+    Lib/mavlink_hal/platforms/stm32/mavlink_hal_stm32.c
 )
 
 # Add include paths
@@ -69,6 +72,9 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Lib/mavlink/c_library_v2
     Lib/mavlink/c_library_v2/robomaster_motor  # Custom motor messages (includes common)
     Lib/mavlink/c_library_v2/common
+
+    # Portable MAVLink HAL (Epic1 Task1)
+    Lib/mavlink_hal/include
 )
 
 # Add project symbols (macros)
