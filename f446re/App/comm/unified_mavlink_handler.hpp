@@ -10,7 +10,7 @@
 #include "../config/system_config.hpp"
 
 extern "C" {
-#include "mavlink/c_library_v2/common/mavlink.h"
+#include "mavlink/c_library_v2_custom/robomaster_motor/mavlink.h"
 }
 
 #include <functional>

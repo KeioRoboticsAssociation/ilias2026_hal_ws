@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug with ST-Link (Simple)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "stlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/H753UDP.elf",
+            "device": "STM32H753ZI",
+            "interface": "swd",
+            "serialNumber": "",
+            "runToEntryPoint": "main",
+            "svdFile": "${env:HOME}/.config/STMicroelectronics/STM32CubeMX/db/mcu/STM32H753ZITx.svd",
+            "preLaunchTask": "CMake: Build",
+            "swoConfig": {
+                "enabled": false
+            }
+        },
+        {
+            "name": "Attach (No Flash)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "stlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/H753UDP.elf",
+            "device": "STM32H753ZI",
+            "interface": "swd",
+            "svdFile": "${env:HOME}/.config/STMicroelectronics/STM32CubeMX/db/mcu/STM32H753ZITx.svd",
+            "swoConfig": {
+                "enabled": false
+            }
+        },
+        {
+            "name": "STM32Cube: STM32 Launch ST-Link GDB Server (Legacy)",
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+            "runEntry": "main",
+            "imagesAndSymbols": [
+                {
+                    "imageFileName": "${command:st-stm32-ide-debug-launch.get-projects-binary-from-context1}"
+                }
+            ]
+        }
+    ]
+}

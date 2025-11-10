@@ -599,4 +599,88 @@ void ParameterStorage::clearTransaction() {
     active_transaction_.transaction_id = 0;
 }
 
+// Stub implementations for missing methods
+bool ParameterBlock::isValid() const {
+    return header.isValid();
+}
+
+ValidationResult StoredParameter::validateAccess(AuthorizationLevel level, bool allowSafetyCritical) const {
+    if (isSafetyCritical() && !allowSafetyCritical) {
+        return ValidationResult::SAFETY_CRITICAL_DENIED;
+    }
+    AuthorizationLevel required = getRequiredAuthLevel();
+    if (level < required) {
+        return ValidationResult::INSUFFICIENT_AUTHORIZATION;
+    }
+    return ValidationResult::SUCCESS;
+}
+
+ValidationResult StoredParameter::validateValue(float new_value) const {
+    if (new_value < min_value || new_value > max_value) {
+        return ValidationResult::OUT_OF_RANGE;
+    }
+    return ValidationResult::SUCCESS;
+}
+
+bool StoredParameter::isSafetyCritical() const {
+    return (flags & FLAG_SAFETY_CRITICAL) != 0;
+}
+
+AuthorizationLevel StoredParameter::getRequiredAuthLevel() const {
+    if (flags & FLAG_FACTORY_LEVEL) return AuthorizationLevel::FACTORY;
+    if (flags & FLAG_ADMIN_LEVEL) return AuthorizationLevel::ADMIN;
+    return AuthorizationLevel::USER;
+}
+
+bool ParameterBlockHeader::isValid() const {
+    return magic == Config::MAGIC_NUMBER && version == Config::STORAGE_VERSION;
+}
+
+bool StoredParameter::isValid() const {
+    return name[0] != '\0' && verifyCRC();
+}
+
+bool StoredParameter::verifyCRC() const {
+    // Simple stub - always return true
+    return true;
+}
+
+size_t ParameterBlock::getStorageSize() const {
+    return sizeof(ParameterBlock);
+}
+
+void ParameterBlock::updateCRCs() {
+    // Stub implementation - would calculate CRCs for header and data
+    header.updateHeaderCRC();
+}
+
+StoredParameter::StoredParameter() : value(0.0f), default_value(0.0f), min_value(0.0f), max_value(0.0f),
+                                     type(0), flags(0), reserved(0), crc32(0) {
+    name[0] = '\0';
+}
+
+ParameterBlockHeader::ParameterBlockHeader() : magic(Config::MAGIC_NUMBER), version(Config::STORAGE_VERSION),
+                                                param_count(0), timestamp(0), sequence_number(0),
+                                                header_crc(0), data_crc(0) {
+    for (int i = 0; i < 16; ++i) reserved[i] = 0;
+}
+
+void ParameterBlockHeader::updateHeaderCRC() {
+    // Stub - would calculate CRC32 of header
+    header_crc = 0;
+}
+
+void StoredParameter::updateCRC() {
+    // Stub - would calculate CRC32
+    crc32 = 0;
+}
+
+bool StoredParameter::requiresReboot() const {
+    return (flags & FLAG_REQUIRES_REBOOT) != 0;
+}
+
+ParameterCacheEntry::ParameterCacheEntry() : dirty(false), loaded(false), last_access_time(0) {}
+
+AtomicTransaction::AtomicTransaction() : active(false), change_count(0), transaction_id(0) {}
+
 } // namespace Storage

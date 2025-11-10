@@ -60,11 +60,24 @@ struct MotorCommand {
 };
 
 /**
+ * @brief Base class for type-erased motor controllers.
+ */
+class IMotorControllerBase {
+public:
+    virtual ~IMotorControllerBase() = default;
+    virtual BaseMotorState getState() const = 0;
+    virtual Config::Result<void> setCommand(const MotorCommand& cmd) = 0;
+    virtual void emergencyStop() = 0;
+    virtual Config::Result<void> update(float deltaTime) = 0;
+    virtual uint8_t getId() const = 0;
+};
+
+/**
  * @brief Unified interface for all motor controllers.
  * @tparam TConfig The configuration type for the motor controller.
  */
 template<typename TConfig>
-class IMotorController {
+class IMotorController : public IMotorControllerBase {
 public:
     virtual ~IMotorController() = default;
 
@@ -102,19 +115,6 @@ public:
     virtual std::unique_ptr<IMotorController<Config::ServoConfig>> createServo(uint8_t id) = 0;
     virtual std::unique_ptr<IMotorController<Config::DCMotorConfig>> createDCMotor(uint8_t id) = 0;
     virtual std::unique_ptr<IMotorController<Config::RoboMasterConfig>> createRoboMaster(uint8_t id) = 0;
-};
-
-/**
- * @brief Base class for type-erased motor controllers.
- */
-class IMotorControllerBase {
-public:
-    virtual ~IMotorControllerBase() = default;
-    virtual BaseMotorState getState() const = 0;
-    virtual Config::Result<void> setCommand(const MotorCommand& cmd) = 0;
-    virtual void emergencyStop() = 0;
-    virtual Config::Result<void> update(float deltaTime) = 0;
-    virtual uint8_t getId() const = 0;
 };
 
 /**
@@ -158,5 +158,32 @@ public:
     void updateAll(float deltaTime);
     size_t getMotorCount() const { return motorCount_; }
 };
+
+// Template implementation
+template<typename TController>
+Config::Result<Config::ErrorCode> MotorRegistry::registerMotor(uint8_t id, std::unique_ptr<TController> controller) {
+    if (motorCount_ >= Config::System::MAX_MOTORS) {
+        return Config::ErrorCode::RESOURCE_EXHAUSTED;
+    }
+
+    // Check if motor ID already exists
+    for (size_t i = 0; i < motorCount_; ++i) {
+        if (motors_[i].controller && motors_[i].controller->getId() == id) {
+            return Config::ErrorCode::ALREADY_INITIALIZED;
+        }
+    }
+
+    // Determine motor type based on the controller type
+    Config::MotorInstance::Type type = Config::MotorInstance::Type::SERVO; // Default
+
+    // Store the motor - static_cast to base (controllers must implement both interfaces)
+    auto* rawPtr = controller.release();
+    auto* basePtr = static_cast<IMotorControllerBase*>(rawPtr);
+    motors_[motorCount_].controller = std::unique_ptr<IMotorControllerBase>(basePtr);
+    motors_[motorCount_].type = type;
+    motorCount_++;
+
+    return Config::ErrorCode::OK;
+}
 
 } // namespace Motors

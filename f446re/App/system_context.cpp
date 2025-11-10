@@ -314,4 +314,21 @@ void Application::handleErrors() {
     }
 }
 
+// Hardware subsystem implementations
+Config::Result<void> SystemContext::Hardware::initialize() {
+    manager = std::make_unique<HAL::HardwareManager>();
+    if (!manager) {
+        return Config::ErrorCode::RESOURCE_EXHAUSTED;
+    }
+    auto result = manager->initialize();
+    if (!result) {
+        return result.error();
+    }
+    return Config::ErrorCode::OK;
+}
+
+HAL::HardwareManager* SystemContext::Hardware::get() const {
+    return manager.get();
+}
+
 } // namespace System

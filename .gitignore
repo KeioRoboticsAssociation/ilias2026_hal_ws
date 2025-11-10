@@ -10,3 +10,9 @@ cmake_install.cmake
 CLAUDE.md
 request.md
 mavlink_env/
+.vscode
+.clangd
+STM32_FLASH_STORAGE.md
+.settings/
+.claude
+h753_pre/

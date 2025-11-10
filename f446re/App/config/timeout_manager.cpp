@@ -230,4 +230,8 @@ void TimeoutManager::updateStatistics() {
 
 TimeoutManager& timeoutManager = TimeoutManager::getInstance();
 
+// TimeoutTracker constructor
+TimeoutTracker::TimeoutTracker()
+    : type(TimeoutType::MOTOR_WATCHDOG), timeoutMs(0), startTime(0), active(false), recurring(false), callback(nullptr) {}
+
 } // namespace Config
