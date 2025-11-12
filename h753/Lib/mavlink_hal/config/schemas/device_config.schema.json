@@ -1,0 +1,815 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mavlink-hal.io/schemas/device-config.json",
+  "title": "MAVLink Device Configuration Schema",
+  "description": "Comprehensive configuration schema for MAVLink-controlled devices across multiple platforms (STM32, Arduino, ESP32)",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["platform", "mavlink", "devices"],
+  "properties": {
+    "platform": {
+      "type": "object",
+      "description": "Platform and hardware configuration",
+      "required": ["type", "mcu"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["stm32", "arduino", "esp32", "linux"],
+          "description": "Target platform type"
+        },
+        "mcu": {
+          "type": "object",
+          "description": "Microcontroller specifications",
+          "required": ["model"],
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "MCU model (e.g., STM32H753ZI, ATMEGA2560, ESP32-WROOM)",
+              "examples": ["STM32H753ZI", "ATMEGA2560", "ESP32-WROOM-32"]
+            },
+            "clock_mhz": {
+              "type": "number",
+              "description": "Main clock frequency in MHz",
+              "minimum": 1,
+              "maximum": 800,
+              "default": 480
+            },
+            "flash_kb": {
+              "type": "number",
+              "description": "Flash memory size in KB",
+              "minimum": 32
+            },
+            "ram_kb": {
+              "type": "number",
+              "description": "RAM size in KB",
+              "minimum": 2
+            },
+            "voltage": {
+              "type": "number",
+              "description": "Operating voltage in volts",
+              "enum": [3.3, 5.0],
+              "default": 3.3
+            }
+          }
+        },
+        "board": {
+          "type": "string",
+          "description": "Development board name",
+          "examples": ["NUCLEO-H753ZI", "Arduino Mega 2560", "ESP32-DevKitC"]
+        }
+      }
+    },
+
+    "mavlink": {
+      "type": "object",
+      "description": "MAVLink communication configuration",
+      "required": ["system_id", "component_id", "transport"],
+      "properties": {
+        "system_id": {
+          "type": "integer",
+          "description": "MAVLink system ID",
+          "minimum": 1,
+          "maximum": 255,
+          "default": 1
+        },
+        "component_id": {
+          "type": "integer",
+          "description": "MAVLink component ID",
+          "minimum": 1,
+          "maximum": 255,
+          "default": 1
+        },
+        "transport": {
+          "type": "object",
+          "description": "Transport layer configuration",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["uart", "udp", "tcp", "can"],
+              "description": "Transport protocol type"
+            },
+            "uart": {
+              "type": "object",
+              "description": "UART transport settings",
+              "properties": {
+                "port": {
+                  "type": "string",
+                  "description": "UART port identifier",
+                  "examples": ["USART2", "Serial1", "/dev/ttyUSB0"]
+                },
+                "baudrate": {
+                  "type": "integer",
+                  "description": "Baud rate in bps",
+                  "enum": [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600],
+                  "default": 115200
+                },
+                "data_bits": {
+                  "type": "integer",
+                  "enum": [7, 8],
+                  "default": 8
+                },
+                "stop_bits": {
+                  "type": "integer",
+                  "enum": [1, 2],
+                  "default": 1
+                },
+                "parity": {
+                  "type": "string",
+                  "enum": ["none", "odd", "even"],
+                  "default": "none"
+                },
+                "flow_control": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "rx_buffer_size": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 8192,
+                  "default": 512
+                },
+                "tx_buffer_size": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 8192,
+                  "default": 512
+                }
+              }
+            },
+            "udp": {
+              "type": "object",
+              "description": "UDP transport settings",
+              "properties": {
+                "local_ip": {
+                  "type": "string",
+                  "format": "ipv4",
+                  "description": "Local IP address"
+                },
+                "local_port": {
+                  "type": "integer",
+                  "minimum": 1024,
+                  "maximum": 65535,
+                  "default": 14550
+                },
+                "remote_ip": {
+                  "type": "string",
+                  "format": "ipv4",
+                  "description": "Remote IP address"
+                },
+                "remote_port": {
+                  "type": "integer",
+                  "minimum": 1024,
+                  "maximum": 65535,
+                  "default": 14550
+                }
+              }
+            },
+            "can": {
+              "type": "object",
+              "description": "CAN transport settings",
+              "properties": {
+                "interface": {
+                  "type": "string",
+                  "description": "CAN interface",
+                  "examples": ["FDCAN1", "can0"]
+                },
+                "baudrate": {
+                  "type": "integer",
+                  "description": "CAN baudrate in bps",
+                  "enum": [125000, 250000, 500000, 1000000],
+                  "default": 500000
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": ["normal", "loopback", "silent"],
+                  "default": "normal"
+                }
+              }
+            }
+          }
+        },
+        "heartbeat_rate_hz": {
+          "type": "number",
+          "description": "Heartbeat transmission rate in Hz",
+          "minimum": 0.1,
+          "maximum": 100,
+          "default": 1.0
+        },
+        "telemetry_rate_hz": {
+          "type": "number",
+          "description": "Telemetry transmission rate in Hz",
+          "minimum": 0.1,
+          "maximum": 100,
+          "default": 10.0
+        }
+      }
+    },
+
+    "devices": {
+      "type": "array",
+      "description": "Array of device configurations",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "name"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique device ID (1-255)",
+            "minimum": 1,
+            "maximum": 255
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "servo",
+              "dc_motor",
+              "bldc_motor",
+              "stepper",
+              "robomaster",
+              "rs485_motor",
+              "encoder",
+              "imu",
+              "gps",
+              "analog_sensor",
+              "digital_io"
+            ],
+            "description": "Device type"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable device name",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Device enabled state",
+            "default": true
+          },
+          "hardware": {
+            "type": "object",
+            "description": "Hardware pin/interface mapping",
+            "properties": {
+              "pins": {
+                "type": "object",
+                "description": "Pin assignments",
+                "additionalProperties": {
+                  "oneOf": [
+                    {"type": "string"},
+                    {"type": "integer"}
+                  ]
+                }
+              },
+              "timer": {
+                "type": "string",
+                "description": "Timer peripheral (for PWM devices)"
+              },
+              "channel": {
+                "type": "integer",
+                "description": "Timer channel number",
+                "minimum": 1,
+                "maximum": 4
+              },
+              "uart": {
+                "type": "string",
+                "description": "UART peripheral"
+              },
+              "can_id": {
+                "type": "integer",
+                "description": "CAN identifier",
+                "minimum": 0,
+                "maximum": 536870911
+              },
+              "i2c_address": {
+                "type": "integer",
+                "description": "I2C device address",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "spi_cs_pin": {
+                "oneOf": [
+                  {"type": "string"},
+                  {"type": "integer"}
+                ],
+                "description": "SPI chip select pin"
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "description": "Device-specific configuration",
+            "properties": {
+              "servo": {
+                "$ref": "#/definitions/servo_config"
+              },
+              "dc_motor": {
+                "$ref": "#/definitions/dc_motor_config"
+              },
+              "bldc_motor": {
+                "$ref": "#/definitions/bldc_motor_config"
+              },
+              "stepper": {
+                "$ref": "#/definitions/stepper_config"
+              },
+              "robomaster": {
+                "$ref": "#/definitions/robomaster_config"
+              },
+              "rs485_motor": {
+                "$ref": "#/definitions/rs485_motor_config"
+              },
+              "encoder": {
+                "$ref": "#/definitions/encoder_config"
+              },
+              "imu": {
+                "$ref": "#/definitions/imu_config"
+              },
+              "gps": {
+                "$ref": "#/definitions/gps_config"
+              },
+              "analog_sensor": {
+                "$ref": "#/definitions/analog_sensor_config"
+              }
+            }
+          },
+          "limits": {
+            "type": "object",
+            "description": "Safety limits",
+            "properties": {
+              "min_value": {
+                "type": "number",
+                "description": "Minimum allowed value"
+              },
+              "max_value": {
+                "type": "number",
+                "description": "Maximum allowed value"
+              },
+              "max_speed": {
+                "type": "number",
+                "description": "Maximum speed/velocity"
+              },
+              "max_acceleration": {
+                "type": "number",
+                "description": "Maximum acceleration"
+              },
+              "max_current_ma": {
+                "type": "number",
+                "description": "Maximum current in mA",
+                "minimum": 0
+              },
+              "max_temperature_c": {
+                "type": "number",
+                "description": "Maximum temperature in Celsius",
+                "minimum": -40,
+                "maximum": 150
+              }
+            }
+          },
+          "failsafe": {
+            "type": "object",
+            "description": "Failsafe behavior",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["hold", "neutral", "disable", "custom"],
+                "default": "hold"
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "description": "Watchdog timeout in milliseconds",
+                "minimum": 10,
+                "maximum": 10000,
+                "default": 1000
+              },
+              "custom_value": {
+                "type": "number",
+                "description": "Custom failsafe value"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "system": {
+      "type": "object",
+      "description": "System-wide settings",
+      "properties": {
+        "update_rate_hz": {
+          "type": "number",
+          "description": "Main control loop rate in Hz",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 100
+        },
+        "emergency_stop_pin": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "integer"}
+          ],
+          "description": "Emergency stop input pin"
+        },
+        "status_led_pin": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "integer"}
+          ],
+          "description": "Status LED output pin"
+        },
+        "debug": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "level": {
+              "type": "string",
+              "enum": ["error", "warn", "info", "debug"],
+              "default": "info"
+            },
+            "output": {
+              "type": "string",
+              "enum": ["uart", "usb", "file"],
+              "default": "uart"
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "servo_config": {
+      "type": "object",
+      "description": "Servo motor configuration",
+      "properties": {
+        "min_angle_deg": {
+          "type": "number",
+          "description": "Minimum angle in degrees",
+          "default": -90
+        },
+        "max_angle_deg": {
+          "type": "number",
+          "description": "Maximum angle in degrees",
+          "default": 90
+        },
+        "min_pulse_us": {
+          "type": "integer",
+          "description": "Minimum pulse width in microseconds",
+          "default": 1000
+        },
+        "max_pulse_us": {
+          "type": "integer",
+          "description": "Maximum pulse width in microseconds",
+          "default": 2000
+        },
+        "neutral_pulse_us": {
+          "type": "integer",
+          "description": "Neutral position pulse width",
+          "default": 1500
+        },
+        "frequency_hz": {
+          "type": "integer",
+          "description": "PWM frequency in Hz",
+          "default": 50
+        },
+        "inverted": {
+          "type": "boolean",
+          "description": "Reverse direction",
+          "default": false
+        },
+        "startup_angle_deg": {
+          "type": "number",
+          "description": "Initial angle on startup"
+        }
+      }
+    },
+
+    "dc_motor_config": {
+      "type": "object",
+      "description": "DC motor with encoder configuration",
+      "properties": {
+        "encoder_type": {
+          "type": "string",
+          "enum": ["quadrature", "hall", "absolute"],
+          "default": "quadrature"
+        },
+        "encoder_cpr": {
+          "type": "integer",
+          "description": "Encoder counts per revolution",
+          "minimum": 1,
+          "default": 1024
+        },
+        "gear_ratio": {
+          "type": "number",
+          "description": "Gear reduction ratio",
+          "minimum": 0.1,
+          "default": 1.0
+        },
+        "pid_speed": {
+          "$ref": "#/definitions/pid_config"
+        },
+        "pid_position": {
+          "$ref": "#/definitions/pid_config"
+        },
+        "inverted": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "bldc_motor_config": {
+      "type": "object",
+      "description": "BLDC motor (ESC) configuration",
+      "properties": {
+        "esc_protocol": {
+          "type": "string",
+          "enum": ["standard_pwm", "oneshot125", "oneshot42", "dshot150", "dshot300", "dshot600"],
+          "default": "standard_pwm"
+        },
+        "min_throttle": {
+          "type": "integer",
+          "description": "Minimum throttle value",
+          "default": 1000
+        },
+        "max_throttle": {
+          "type": "integer",
+          "description": "Maximum throttle value",
+          "default": 2000
+        },
+        "kv_rating": {
+          "type": "integer",
+          "description": "Motor KV rating (RPM/V)"
+        },
+        "poles": {
+          "type": "integer",
+          "description": "Number of poles",
+          "default": 14
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["cw", "ccw"],
+          "default": "cw"
+        }
+      }
+    },
+
+    "stepper_config": {
+      "type": "object",
+      "description": "Stepper motor configuration",
+      "properties": {
+        "steps_per_rev": {
+          "type": "integer",
+          "description": "Steps per revolution",
+          "enum": [200, 400, 1600, 3200],
+          "default": 200
+        },
+        "microsteps": {
+          "type": "integer",
+          "description": "Microstepping divisor",
+          "enum": [1, 2, 4, 8, 16, 32],
+          "default": 16
+        },
+        "max_speed_steps_s": {
+          "type": "integer",
+          "description": "Maximum speed in steps/second",
+          "minimum": 1
+        },
+        "acceleration_steps_s2": {
+          "type": "integer",
+          "description": "Acceleration in steps/s²",
+          "minimum": 1
+        },
+        "enable_pin_inverted": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "robomaster_config": {
+      "type": "object",
+      "description": "DJI RoboMaster motor configuration",
+      "properties": {
+        "motor_type": {
+          "type": "string",
+          "enum": ["M3508", "M2006", "GM6020"],
+          "description": "RoboMaster motor type"
+        },
+        "reduction_ratio": {
+          "type": "number",
+          "description": "Gearbox reduction ratio",
+          "default": 19.0
+        },
+        "pid_speed": {
+          "$ref": "#/definitions/pid_config"
+        },
+        "pid_angle": {
+          "$ref": "#/definitions/pid_config"
+        },
+        "current_limit_ma": {
+          "type": "integer",
+          "description": "Current limit in mA",
+          "minimum": 0,
+          "maximum": 20000
+        }
+      }
+    },
+
+    "rs485_motor_config": {
+      "type": "object",
+      "description": "RS485 motor (Ikeya MD) configuration",
+      "properties": {
+        "device_id": {
+          "type": "integer",
+          "description": "RS485 device ID",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "control_mode": {
+          "type": "string",
+          "enum": ["velocity", "position"],
+          "default": "velocity"
+        },
+        "max_velocity_rps": {
+          "type": "number",
+          "description": "Maximum velocity in RPS",
+          "minimum": 0,
+          "default": 100.0
+        },
+        "max_acceleration_rps2": {
+          "type": "number",
+          "description": "Maximum acceleration in RPS²",
+          "minimum": 0,
+          "default": 200.0
+        },
+        "encoder_resolution": {
+          "type": "integer",
+          "description": "Encoder counts per revolution",
+          "default": 8192
+        },
+        "retry_count": {
+          "type": "integer",
+          "description": "Number of retries on communication error",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        }
+      }
+    },
+
+    "encoder_config": {
+      "type": "object",
+      "description": "Standalone encoder configuration",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["incremental", "absolute", "magnetic"],
+          "default": "incremental"
+        },
+        "resolution": {
+          "type": "integer",
+          "description": "Encoder resolution (PPR or bits)",
+          "minimum": 1
+        },
+        "interface": {
+          "type": "string",
+          "enum": ["quadrature", "ssi", "spi", "i2c"],
+          "default": "quadrature"
+        }
+      }
+    },
+
+    "imu_config": {
+      "type": "object",
+      "description": "IMU sensor configuration",
+      "properties": {
+        "sensor_model": {
+          "type": "string",
+          "description": "IMU sensor model",
+          "examples": ["MPU6050", "BMI088", "LSM6DS3"]
+        },
+        "sample_rate_hz": {
+          "type": "integer",
+          "description": "Sampling rate in Hz",
+          "minimum": 1,
+          "maximum": 8000,
+          "default": 100
+        },
+        "accel_range_g": {
+          "type": "integer",
+          "description": "Accelerometer range in G",
+          "enum": [2, 4, 8, 16],
+          "default": 2
+        },
+        "gyro_range_dps": {
+          "type": "integer",
+          "description": "Gyroscope range in degrees/second",
+          "enum": [250, 500, 1000, 2000],
+          "default": 250
+        }
+      }
+    },
+
+    "gps_config": {
+      "type": "object",
+      "description": "GPS module configuration",
+      "properties": {
+        "module": {
+          "type": "string",
+          "description": "GPS module model",
+          "examples": ["NEO-M8N", "NEO-M9N"]
+        },
+        "baudrate": {
+          "type": "integer",
+          "enum": [9600, 19200, 38400, 57600, 115200],
+          "default": 9600
+        },
+        "update_rate_hz": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5
+        }
+      }
+    },
+
+    "analog_sensor_config": {
+      "type": "object",
+      "description": "Analog sensor configuration",
+      "properties": {
+        "sensor_type": {
+          "type": "string",
+          "enum": ["voltage", "current", "temperature", "pressure", "distance", "custom"],
+          "default": "custom"
+        },
+        "vref": {
+          "type": "number",
+          "description": "Reference voltage",
+          "default": 3.3
+        },
+        "resolution_bits": {
+          "type": "integer",
+          "description": "ADC resolution in bits",
+          "enum": [8, 10, 12, 16],
+          "default": 12
+        },
+        "calibration": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "type": "number",
+              "default": 0
+            },
+            "scale": {
+              "type": "number",
+              "default": 1.0
+            },
+            "units": {
+              "type": "string",
+              "description": "Measurement units"
+            }
+          }
+        }
+      }
+    },
+
+    "pid_config": {
+      "type": "object",
+      "description": "PID controller configuration",
+      "properties": {
+        "kp": {
+          "type": "number",
+          "description": "Proportional gain",
+          "minimum": 0,
+          "default": 1.0
+        },
+        "ki": {
+          "type": "number",
+          "description": "Integral gain",
+          "minimum": 0,
+          "default": 0.0
+        },
+        "kd": {
+          "type": "number",
+          "description": "Derivative gain",
+          "minimum": 0,
+          "default": 0.0
+        },
+        "max_integral": {
+          "type": "number",
+          "description": "Maximum integral accumulation",
+          "minimum": 0
+        },
+        "max_output": {
+          "type": "number",
+          "description": "Maximum controller output",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

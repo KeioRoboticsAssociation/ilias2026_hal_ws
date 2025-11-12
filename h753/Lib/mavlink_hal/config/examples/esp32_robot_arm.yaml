@@ -1,0 +1,236 @@
+# MAVLink Device Configuration - ESP32 Robot Arm
+
+platform:
+  type: esp32
+  mcu:
+    model: ESP32-WROOM-32
+    clock_mhz: 240
+    flash_kb: 4096
+    ram_kb: 520
+    voltage: 3.3
+  board: ESP32-DevKitC
+
+mavlink:
+  system_id: 1
+  component_id: 1
+  transport:
+    type: uart
+    uart:
+      port: Serial2  # Use Serial2 (GPIO16/17)
+      baudrate: 115200
+      data_bits: 8
+      stop_bits: 1
+      parity: none
+      rx_buffer_size: 1024
+      tx_buffer_size: 1024
+  heartbeat_rate_hz: 1.0
+  telemetry_rate_hz: 20.0
+
+devices:
+  # Servo motors for 6-DOF robot arm
+  - id: 1
+    type: servo
+    name: base_rotation
+    enabled: true
+    hardware:
+      pins:
+        pwm: 12  # GPIO12
+    config:
+      servo:
+        min_angle_deg: -180
+        max_angle_deg: 180
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    limits:
+      max_speed: 30  # deg/s
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 2
+    type: servo
+    name: shoulder
+    enabled: true
+    hardware:
+      pins:
+        pwm: 14
+    config:
+      servo:
+        min_angle_deg: -90
+        max_angle_deg: 90
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 3
+    type: servo
+    name: elbow
+    enabled: true
+    hardware:
+      pins:
+        pwm: 27
+    config:
+      servo:
+        min_angle_deg: -90
+        max_angle_deg: 90
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 4
+    type: servo
+    name: wrist_rotation
+    enabled: true
+    hardware:
+      pins:
+        pwm: 26
+    config:
+      servo:
+        min_angle_deg: -180
+        max_angle_deg: 180
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 5
+    type: servo
+    name: wrist_tilt
+    enabled: true
+    hardware:
+      pins:
+        pwm: 25
+    config:
+      servo:
+        min_angle_deg: -90
+        max_angle_deg: 90
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 6
+    type: servo
+    name: gripper
+    enabled: true
+    hardware:
+      pins:
+        pwm: 33
+    config:
+      servo:
+        min_angle_deg: 0
+        max_angle_deg: 90
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        startup_angle_deg: 0
+    failsafe:
+      action: neutral
+      timeout_ms: 1000
+
+  # Stepper motor for precise base positioning
+  - id: 10
+    type: stepper
+    name: precision_base
+    enabled: false  # Optional upgrade
+    hardware:
+      pins:
+        step: 18
+        dir: 19
+        enable: 23
+    config:
+      stepper:
+        steps_per_rev: 200
+        microsteps: 16
+        max_speed_steps_s: 2000
+        acceleration_steps_s2: 1000
+        enable_pin_inverted: false
+    limits:
+      max_speed: 10  # rev/s
+
+  # IMU for arm stabilization
+  - id: 20
+    type: imu
+    name: arm_tip_imu
+    enabled: true
+    hardware:
+      i2c_address: 0x68
+      pins:
+        sda: 21
+        scl: 22
+    config:
+      imu:
+        sensor_model: MPU6050
+        sample_rate_hz: 50
+        accel_range_g: 2
+        gyro_range_dps: 250
+
+  # Analog sensors for load detection
+  - id: 30
+    type: analog_sensor
+    name: gripper_force
+    enabled: true
+    hardware:
+      pins:
+        adc: 34  # ADC1_CH6
+    config:
+      analog_sensor:
+        sensor_type: custom
+        vref: 3.3
+        resolution_bits: 12
+        calibration:
+          offset: 0.0
+          scale: 1.0
+          units: "N"
+    limits:
+      max_value: 50.0  # 50N max force
+
+  - id: 31
+    type: analog_sensor
+    name: base_current
+    enabled: true
+    hardware:
+      pins:
+        adc: 35  # ADC1_CH7
+    config:
+      analog_sensor:
+        sensor_type: current
+        vref: 3.3
+        resolution_bits: 12
+        calibration:
+          offset: 1.65
+          scale: 0.1
+          units: "A"
+    limits:
+      max_value: 5.0  # 5A max
+
+system:
+  update_rate_hz: 100
+  emergency_stop_pin: 0  # BOOT button
+  status_led_pin: 2      # Built-in LED
+  debug:
+    enabled: true
+    level: debug
+    output: uart  # Serial USB for debugging

@@ -1,0 +1,399 @@
+# MAVLink Device Configuration - STM32H753 Rover
+# This configuration matches the existing h753 project setup
+
+platform:
+  type: stm32
+  mcu:
+    model: STM32H753ZI
+    clock_mhz: 480
+    flash_kb: 2048
+    ram_kb: 1024
+    voltage: 3.3
+  board: NUCLEO-H753ZI
+
+mavlink:
+  system_id: 1
+  component_id: 1  # MAV_COMP_ID_ONBOARD_COMPUTER
+  transport:
+    type: udp
+    udp:
+      local_ip: "192.168.11.4"
+      local_port: 14550
+      remote_ip: "192.168.11.2"
+      remote_port: 14550
+  heartbeat_rate_hz: 1.0
+  telemetry_rate_hz: 10.0
+
+devices:
+  # Servo motors (IDs 1-9)
+  - id: 1
+    type: servo
+    name: front_left_gripper
+    enabled: true
+    hardware:
+      pins:
+        pwm: PA8
+      timer: TIM1
+      channel: 1
+    config:
+      servo:
+        min_angle_deg: -90
+        max_angle_deg: 90
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        inverted: false
+        startup_angle_deg: 0
+    limits:
+      max_speed: 60  # degrees/second
+    failsafe:
+      action: neutral
+      timeout_ms: 1000
+
+  - id: 2
+    type: servo
+    name: front_right_gripper
+    enabled: true
+    hardware:
+      pins:
+        pwm: PA9
+      timer: TIM1
+      channel: 2
+    config:
+      servo:
+        min_angle_deg: -90
+        max_angle_deg: 90
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+        neutral_pulse_us: 1500
+        frequency_hz: 50
+        inverted: false
+        startup_angle_deg: 0
+    failsafe:
+      action: neutral
+      timeout_ms: 1000
+
+  # DC motors with encoders (IDs 10-15)
+  - id: 10
+    type: dc_motor
+    name: left_drive_wheel
+    enabled: true
+    hardware:
+      pins:
+        pwm: PB0
+        dir: PB1
+        enc_a: PC6
+        enc_b: PC7
+      timer: TIM3
+      channel: 3
+    config:
+      dc_motor:
+        encoder_type: quadrature
+        encoder_cpr: 1024
+        gear_ratio: 30.0
+        pid_speed:
+          kp: 0.1
+          ki: 0.05
+          kd: 0.01
+          max_integral: 100
+          max_output: 1.0
+        pid_position:
+          kp: 0.5
+          ki: 0.0
+          kd: 0.1
+          max_integral: 50
+          max_output: 1.0
+        inverted: false
+    limits:
+      max_speed: 100  # RPM
+      max_current_ma: 3000
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  - id: 11
+    type: dc_motor
+    name: right_drive_wheel
+    enabled: true
+    hardware:
+      pins:
+        pwm: PB10
+        dir: PB11
+        enc_a: PA0
+        enc_b: PA1
+      timer: TIM2
+      channel: 3
+    config:
+      dc_motor:
+        encoder_type: quadrature
+        encoder_cpr: 1024
+        gear_ratio: 30.0
+        pid_speed:
+          kp: 0.1
+          ki: 0.05
+          kd: 0.01
+          max_integral: 100
+          max_output: 1.0
+        pid_position:
+          kp: 0.5
+          ki: 0.0
+          kd: 0.1
+          max_integral: 50
+          max_output: 1.0
+        inverted: true  # Reverse direction for opposite wheel
+    limits:
+      max_speed: 100  # RPM
+      max_current_ma: 3000
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  # RoboMaster motors (IDs 20-29)
+  - id: 20
+    type: robomaster
+    name: turret_yaw
+    enabled: true
+    hardware:
+      can_id: 0x205  # GM6020 motor 1
+    config:
+      robomaster:
+        motor_type: GM6020
+        reduction_ratio: 1.0
+        pid_speed:
+          kp: 50.0
+          ki: 0.1
+          kd: 0.0
+          max_integral: 1000
+          max_output: 30000
+        pid_angle:
+          kp: 0.1
+          ki: 0.0
+          kd: 0.0
+          max_integral: 100
+          max_output: 500
+        current_limit_ma: 3000
+    limits:
+      max_speed: 320  # RPM
+      max_temperature_c: 80
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 21
+    type: robomaster
+    name: turret_pitch
+    enabled: true
+    hardware:
+      can_id: 0x206  # GM6020 motor 2
+    config:
+      robomaster:
+        motor_type: GM6020
+        reduction_ratio: 1.0
+        pid_speed:
+          kp: 50.0
+          ki: 0.1
+          kd: 0.0
+          max_integral: 1000
+          max_output: 30000
+        pid_angle:
+          kp: 0.1
+          ki: 0.0
+          kd: 0.0
+          max_integral: 100
+          max_output: 500
+        current_limit_ma: 3000
+    limits:
+      min_value: -45  # degrees
+      max_value: 45   # degrees
+      max_temperature_c: 80
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 22
+    type: robomaster
+    name: flywheel_left
+    enabled: true
+    hardware:
+      can_id: 0x201  # M3508 motor 1
+    config:
+      robomaster:
+        motor_type: M3508
+        reduction_ratio: 19.0
+        pid_speed:
+          kp: 8.0
+          ki: 0.5
+          kd: 0.0
+          max_integral: 3000
+          max_output: 16000
+        current_limit_ma: 10000
+    limits:
+      max_speed: 469  # RPM (actual motor RPM before reduction)
+      max_current_ma: 10000
+      max_temperature_c: 90
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  - id: 23
+    type: robomaster
+    name: flywheel_right
+    enabled: true
+    hardware:
+      can_id: 0x202  # M3508 motor 2
+    config:
+      robomaster:
+        motor_type: M3508
+        reduction_ratio: 19.0
+        pid_speed:
+          kp: 8.0
+          ki: 0.5
+          kd: 0.0
+          max_integral: 3000
+          max_output: 16000
+        current_limit_ma: 10000
+    limits:
+      max_speed: 469  # RPM
+      max_current_ma: 10000
+      max_temperature_c: 90
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  # RS485 motors (IDs 30-49)
+  - id: 30
+    type: rs485_motor
+    name: conveyor_motor_1
+    enabled: true
+    hardware:
+      uart: USART1
+      pins:
+        tx: PA9
+        rx: PA10
+    config:
+      rs485_motor:
+        device_id: 1
+        control_mode: velocity
+        max_velocity_rps: 100.0
+        max_acceleration_rps2: 200.0
+        encoder_resolution: 8192
+        retry_count: 3
+    limits:
+      max_speed: 100  # RPS
+      max_temperature_c: 85
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 31
+    type: rs485_motor
+    name: conveyor_motor_2
+    enabled: true
+    hardware:
+      uart: USART2
+      pins:
+        tx: PA2
+        rx: PA3
+    config:
+      rs485_motor:
+        device_id: 2
+        control_mode: position
+        max_velocity_rps: 50.0
+        max_acceleration_rps2: 100.0
+        encoder_resolution: 8192
+        retry_count: 3
+    limits:
+      max_speed: 50  # RPS
+      max_temperature_c: 85
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  # Analog sensors
+  - id: 100
+    type: analog_sensor
+    name: battery_voltage
+    enabled: true
+    hardware:
+      pins:
+        adc: PC0
+    config:
+      analog_sensor:
+        sensor_type: voltage
+        vref: 3.3
+        resolution_bits: 12
+        calibration:
+          offset: 0.0
+          scale: 11.0  # Voltage divider ratio
+          units: "V"
+    limits:
+      min_value: 10.0  # V
+      max_value: 16.8  # V (4S LiPo max)
+
+  - id: 101
+    type: analog_sensor
+    name: motor_current
+    enabled: true
+    hardware:
+      pins:
+        adc: PC1
+    config:
+      analog_sensor:
+        sensor_type: current
+        vref: 3.3
+        resolution_bits: 12
+        calibration:
+          offset: 1.65  # Center at 1.65V for bidirectional
+          scale: 0.066  # 66mV/A for ACS712-30A
+          units: "A"
+    limits:
+      max_value: 30.0  # A
+
+  # IMU sensor
+  - id: 110
+    type: imu
+    name: main_imu
+    enabled: true
+    hardware:
+      i2c_address: 0x68
+      pins:
+        sda: PB9
+        scl: PB8
+    config:
+      imu:
+        sensor_model: MPU6050
+        sample_rate_hz: 100
+        accel_range_g: 2
+        gyro_range_dps: 250
+
+system:
+  update_rate_hz: 100  # 100Hz main control loop
+  emergency_stop_pin: PC13  # Blue button on Nucleo
+  status_led_pin: PB0      # Green LED (LD1)
+  debug:
+    enabled: true
+    level: info
+    output: uart
+
+# Metadata (not part of schema, for documentation)
+metadata:
+  author: "Claude Code"
+  version: "1.0.0"
+  date: "2025-11-11"
+  description: "Complete configuration for STM32H753 rover with servos, DC motors, RoboMaster motors, and RS485 motors"
+  notes: |
+    This configuration demonstrates:
+    - 2 servo motors for gripper
+    - 2 DC motors with encoders for drive wheels
+    - 4 RoboMaster motors (2x GM6020 for turret, 2x M3508 for flywheels)
+    - 2 RS485 motors for conveyor
+    - Battery voltage and current monitoring
+    - IMU for orientation sensing
+
+    Motor ID ranges:
+    - Servos: 1-9
+    - DC motors: 10-15
+    - RoboMaster: 20-29
+    - RS485: 30-49
+    - Sensors: 100+

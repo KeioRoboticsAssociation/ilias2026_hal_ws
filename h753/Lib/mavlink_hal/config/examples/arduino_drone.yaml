@@ -1,0 +1,200 @@
+# MAVLink Device Configuration - Arduino Mega 2560 Quadcopter
+
+platform:
+  type: arduino
+  mcu:
+    model: ATMEGA2560
+    clock_mhz: 16
+    flash_kb: 256
+    ram_kb: 8
+    voltage: 5.0
+  board: Arduino Mega 2560
+
+mavlink:
+  system_id: 1
+  component_id: 1
+  transport:
+    type: uart
+    uart:
+      port: Serial1  # Use Serial1, Serial is for USB
+      baudrate: 57600
+      data_bits: 8
+      stop_bits: 1
+      parity: none
+      rx_buffer_size: 256
+      tx_buffer_size: 256
+  heartbeat_rate_hz: 1.0
+  telemetry_rate_hz: 5.0
+
+devices:
+  # ESC/BLDC motors for quadcopter (PWM pins)
+  - id: 1
+    type: bldc_motor
+    name: motor_front_right
+    enabled: true
+    hardware:
+      pins:
+        pwm: 2  # PWM pin
+    config:
+      bldc_motor:
+        esc_protocol: standard_pwm
+        min_throttle: 1000
+        max_throttle: 2000
+        kv_rating: 2300
+        poles: 14
+        direction: cw
+    limits:
+      max_value: 0.9  # 90% max throttle for safety
+    failsafe:
+      action: custom
+      custom_value: 0.0  # Cut motors on failsafe
+      timeout_ms: 500
+
+  - id: 2
+    type: bldc_motor
+    name: motor_back_left
+    enabled: true
+    hardware:
+      pins:
+        pwm: 3
+    config:
+      bldc_motor:
+        esc_protocol: standard_pwm
+        min_throttle: 1000
+        max_throttle: 2000
+        kv_rating: 2300
+        poles: 14
+        direction: cw
+    limits:
+      max_value: 0.9
+    failsafe:
+      action: custom
+      custom_value: 0.0
+      timeout_ms: 500
+
+  - id: 3
+    type: bldc_motor
+    name: motor_front_left
+    enabled: true
+    hardware:
+      pins:
+        pwm: 4
+    config:
+      bldc_motor:
+        esc_protocol: standard_pwm
+        min_throttle: 1000
+        max_throttle: 2000
+        kv_rating: 2300
+        poles: 14
+        direction: ccw
+    limits:
+      max_value: 0.9
+    failsafe:
+      action: custom
+      custom_value: 0.0
+      timeout_ms: 500
+
+  - id: 4
+    type: bldc_motor
+    name: motor_back_right
+    enabled: true
+    hardware:
+      pins:
+        pwm: 5
+    config:
+      bldc_motor:
+        esc_protocol: standard_pwm
+        min_throttle: 1000
+        max_throttle: 2000
+        kv_rating: 2300
+        poles: 14
+        direction: ccw
+    limits:
+      max_value: 0.9
+    failsafe:
+      action: custom
+      custom_value: 0.0
+      timeout_ms: 500
+
+  # IMU sensor (I2C)
+  - id: 10
+    type: imu
+    name: flight_controller_imu
+    enabled: true
+    hardware:
+      i2c_address: 0x68
+      pins:
+        sda: 20  # SDA on Mega
+        scl: 21  # SCL on Mega
+    config:
+      imu:
+        sensor_model: MPU6050
+        sample_rate_hz: 200
+        accel_range_g: 8
+        gyro_range_dps: 1000
+
+  # GPS module (Serial2)
+  - id: 11
+    type: gps
+    name: gps_module
+    enabled: true
+    hardware:
+      uart: Serial2
+      pins:
+        tx: 16
+        rx: 17
+    config:
+      gps:
+        module: NEO-M8N
+        baudrate: 9600
+        update_rate_hz: 5
+
+  # Battery voltage monitor
+  - id: 20
+    type: analog_sensor
+    name: battery_voltage
+    enabled: true
+    hardware:
+      pins:
+        adc: A0
+    config:
+      analog_sensor:
+        sensor_type: voltage
+        vref: 5.0
+        resolution_bits: 10
+        calibration:
+          offset: 0.0
+          scale: 5.0  # Voltage divider for 3S-4S LiPo
+          units: "V"
+    limits:
+      min_value: 9.0   # 3S LiPo minimum (3.0V/cell)
+      max_value: 16.8  # 4S LiPo maximum (4.2V/cell)
+
+  # Current sensor
+  - id: 21
+    type: analog_sensor
+    name: battery_current
+    enabled: true
+    hardware:
+      pins:
+        adc: A1
+    config:
+      analog_sensor:
+        sensor_type: current
+        vref: 5.0
+        resolution_bits: 10
+        calibration:
+          offset: 2.5
+          scale: 0.037  # 37mV/A for ACS758
+          units: "A"
+    limits:
+      max_value: 50.0  # 50A max
+
+system:
+  update_rate_hz: 100
+  emergency_stop_pin: 13  # Built-in LED as status
+  status_led_pin: 13
+  debug:
+    enabled: false  # Limited RAM on AVR
+    level: error
+    output: uart
