@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MAVLink HAL Device Configuration Schema",
+  "type": "object",
+  "required": ["platform", "mavlink", "devices"],
+  "properties": {
+    "platform": {
+      "type": "object",
+      "required": ["type", "mcu"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["stm32", "arduino", "esp32", "linux"]
+        },
+        "mcu": {
+          "type": "object",
+          "required": ["model", "clock_mhz"],
+          "properties": {
+            "model": {"type": "string"},
+            "clock_mhz": {"type": "number"},
+            "flash_kb": {"type": "number"},
+            "ram_kb": {"type": "number"}
+          }
+        }
+      }
+    },
+    "mavlink": {
+      "type": "object",
+      "required": ["system_id", "component_id", "transport"],
+      "properties": {
+        "system_id": {"type": "integer", "minimum": 1, "maximum": 255},
+        "component_id": {"type": "integer", "minimum": 1, "maximum": 255},
+        "transport": {"type": "object"}
+      }
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "name", "hardware"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1, "maximum": 255},
+          "type": {
+            "type": "string",
+            "enum": ["servo", "dc_motor", "bldc_motor", "stepper", "robomaster",
+                     "rs485_motor", "encoder", "imu", "gps", "analog_sensor", "digital_io"]
+          },
+          "name": {"type": "string"},
+          "hardware": {"type": "object"},
+          "config": {"type": "object"},
+          "limits": {"type": "object"},
+          "failsafe": {"type": "object"}
+        }
+      }
+    },
+    "system": {"type": "object"}
+  }
+}

@@ -163,6 +163,7 @@ typedef enum {
 typedef struct {
     uint8_t id;                         // Motor ID (software, for MAVLink mapping)
     uint8_t rs485_device_id;            // RS485 device ID (1-8, hardware DIP switch)
+    uint8_t motor_index;                // Motor index on the board (0-2 for 3 motors)
     uint8_t uart_id;                    // UART peripheral ID (1, 2, 6 for USART1/2/6)
     rs485_control_mode_t control_mode;  // Velocity or Position control
 
@@ -349,8 +350,10 @@ static const robomaster_config_t ROBOMASTER_CONFIGS[MAX_ROBOMASTER] = {
 static const rs485_config_t RS485_CONFIGS[MAX_RS485] = {
     {
         // RS485 Motor #1 (Ikeya MD, velocity control via USART1)
+        // Board ID 1, Motor Index 0 (first motor on the board)
         .id = 30,
         .rs485_device_id = 1,         // DIP switch ID (1-8)
+        .motor_index = 0,             // Motor 0 on the board (0-2)
         .uart_id = 1,                 // USART1
         .control_mode = RS485_MODE_VELOCITY,  // Or RS485_MODE_POSITION
         .max_rps = 100.0f,            // Maximum 100 RPS
@@ -362,8 +365,10 @@ static const rs485_config_t RS485_CONFIGS[MAX_RS485] = {
     },
     {
         // RS485 Motor #2 (Ikeya MD, position control via USART2)
+        // Board ID 2, Motor Index 0 (first motor on the board)
         .id = 31,
         .rs485_device_id = 2,         // DIP switch ID (1-8)
+        .motor_index = 0,             // Motor 0 on the board (0-2)
         .uart_id = 2,                 // USART2
         .control_mode = RS485_MODE_POSITION,
         .max_rps = 100.0f,

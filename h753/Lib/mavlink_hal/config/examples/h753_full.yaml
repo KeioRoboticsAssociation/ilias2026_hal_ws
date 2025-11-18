@@ -1,0 +1,303 @@
+# Complete H753 Motor Configuration
+# Extracted from App/config/motor_config.h
+#
+# Motor Inventory:
+# - 4 Servos (IDs 1-4): TIM1, TIM2
+# - 2 DC Motors (IDs 10-11): TIM3 with PID
+# - 2 RoboMaster Motors (IDs 20-21): CAN1 (GM6020 + M3508)
+# - 2 RS485 Motors (IDs 30-31): USART1, USART2 (Ikeya MD)
+
+platform:
+  type: stm32
+  mcu:
+    model: STM32H753ZI
+    clock_mhz: 480
+    voltage_v: 3.3
+    memory:
+      flash_kb: 2048
+      ram_kb: 1024
+
+mavlink:
+  system_id: 1
+  component_id: 1
+  autopilot_type: 0  # MAV_AUTOPILOT_GENERIC
+  transport:
+    type: udp
+    udp:
+      local_ip: "192.168.11.4"
+      local_port: 14550
+      remote_ip: "192.168.11.2"
+      remote_port: 14550
+
+system:
+  loop_frequency_hz: 100
+  heartbeat_rate_hz: 1
+  telemetry_rate_hz: 10
+  watchdog_timeout_ms: 1000
+  debug_mode: true
+
+devices:
+  # ============================================================================
+  # SERVO MOTORS (IDs 1-4)
+  # ============================================================================
+
+  - id: 1
+    type: servo
+    name: servo_1
+    hardware:
+      timer: "15"
+      channel: 1
+      pins:
+        pwm: PE5
+    config:
+      servo:
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_angle: 0.0
+    limits:
+      min_value: -90.0
+      max_value: 90.0
+      max_velocity: 120.0  # deg/s
+      max_acceleration: 240.0  # deg/s^2
+    failsafe:
+      action: neutral
+      timeout_ms: 500
+
+  - id: 2
+    type: servo
+    name: servo_2
+    hardware:
+      timer: "15"
+      channel: 2
+      pins:
+        pwm: PE6
+    config:
+      servo:
+        min_pulse_us: 500
+        max_pulse_us: 2500
+        neutral_angle: 0.0
+    limits:
+      min_value: -90.0
+      max_value: 90.0
+      max_velocity: 120.0
+      max_acceleration: 240.0
+    failsafe:
+      action: neutral
+      timeout_ms: 500
+
+  # ============================================================================
+  # DC MOTORS (IDs 10-11) - MD10C Motor Driver (1 PWM + 1 DIR)
+  # ============================================================================
+
+  - id: 10
+    type: dc_motor
+    name: dc_motor_left
+    hardware:
+      timer: "3"
+      channel: 1
+      pins:
+        pwm: PA6
+        dir: PF3        # Direction GPIO (HIGH=forward, LOW=reverse)
+        encoder_a: PE9
+        encoder_b: PE11
+    config:
+      dc_motor:
+        encoder:
+          enabled: true
+          ppr: 8192
+          reversed: false
+        pid_velocity:
+          kp: 0.1
+          ki: 0.05
+          kd: 0.0
+          max_integral: 0.3
+          max_output: 1.0
+        pid_position:
+          kp: 0.5
+          ki: 0.0
+          kd: 0.1
+          max_integral: 100.0
+          max_output: 10.0
+        direction_inverted: false
+    limits:
+      max_speed: 15.0  # rad/s
+      max_acceleration: 50.0  # rad/s^2
+      min_position: -314.159  # rad (approx -100 rotations)
+      max_position: 314.159   # rad (approx +100 rotations)
+      use_position_limits: true
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 11
+    type: dc_motor
+    name: dc_motor_right
+    hardware:
+      timer: "3"
+      channel: 2
+      pins:
+        pwm: PB5
+        dir: PF4        # Direction GPIO (HIGH=forward, LOW=reverse)
+        encoder_a: PA0
+        encoder_b: PB3
+    config:
+      dc_motor:
+        encoder:
+          enabled: true
+          ppr: 8192
+          reversed: false
+        pid_velocity:
+          kp: 0.1
+          ki: 0.05
+          kd: 0.0
+          max_integral: 0.3
+          max_output: 1.0
+        pid_position:
+          kp: 0.5
+          ki: 0.0
+          kd: 0.1
+          max_integral: 100.0
+          max_output: 10.0
+        direction_inverted: false
+    limits:
+      max_speed: 15.0
+      max_acceleration: 50.0
+      min_position: -314.159
+      max_position: 314.159
+      use_position_limits: true
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  # ============================================================================
+  # ROBOMASTER MOTORS (IDs 20-21)
+  # ============================================================================
+
+  - id: 20
+    type: robomaster
+    name: gimbal_yaw
+    hardware:
+      can_id: 0x205
+      can_bus: 1
+    config:
+      robomaster:
+        motor_type: GM6020  # GM6020 gimbal motor (voltage control)
+        pid_speed:
+          kp: 50.0  # Higher gain for GM6020
+          ki: 0.1
+          kd: 0.0
+        pid_angle:
+          kp: 0.1
+          ki: 0.0
+          kd: 0.0
+    limits:
+      max_speed: 10.0  # rad/s
+      max_acceleration: 30.0  # rad/s^2
+      max_current_ma: 10000
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  - id: 21
+    type: robomaster
+    name: chassis_wheel
+    hardware:
+      can_id: 0x201
+      can_bus: 1
+    config:
+      robomaster:
+        motor_type: M3508  # M3508 drive motor (current control)
+        pid_speed:
+          kp: 0.5  # Lower gain for M3508
+          ki: 0.1
+          kd: 0.0
+        pid_angle:
+          kp: 0.1
+          ki: 0.0
+          kd: 0.0
+    limits:
+      max_speed: 10.0  # rad/s
+      max_acceleration: 30.0
+      max_current_ma: 10000
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  # ============================================================================
+  # RS485 MOTORS (IDs 30-31) - Ikeya MD
+  # ============================================================================
+
+  - id: 30
+    type: rs485_motor
+    name: conveyor_motor_1
+    enabled: true
+    hardware:
+      uart: USART1
+      pins:
+        tx: PA9
+        rx: PA10
+    config:
+      rs485_motor:
+        device_id: 1        # RS485 board ID (1-8, set via DIP switch)
+        motor_index: 0      # First motor on this board (0, 1, or 2)
+        control_mode: velocity
+        max_velocity_rps: 100.0
+        max_acceleration_rps2: 200.0
+        encoder_resolution: 8192
+        retry_count: 3
+    limits:
+      max_speed: 100  # RPS
+      max_temperature_c: 85
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 31
+    type: rs485_motor
+    name: conveyor_motor_2
+    enabled: true
+    hardware:
+      uart: USART1        # Same UART as motor 30
+      pins:
+        tx: PA9
+        rx: PA10
+    config:
+      rs485_motor:
+        device_id: 1        # Same RS485 board as motor 30
+        motor_index: 1      # Second motor on this board
+        control_mode: velocity
+        max_velocity_rps: 80.0
+        max_acceleration_rps2: 150.0
+        encoder_resolution: 8192
+        retry_count: 3
+    limits:
+      max_speed: 100  # RPS
+      max_temperature_c: 85
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 32
+    type: rs485_motor
+    name: lift_motor
+    enabled: true
+    hardware:
+      uart: USART1        # Same UART as motors 30-31
+      pins:
+        tx: PA9
+        rx: PA10
+    config:
+      rs485_motor:
+        device_id: 1        # Same RS485 board as motors 30-31
+        motor_index: 2      # Third motor on this board
+        control_mode: velocity
+        max_velocity_rps: 50.0
+        max_acceleration_rps2: 100.0
+        encoder_resolution: 8192
+        retry_count: 3
+    limits:
+      max_speed: 100  # RPS
+      max_temperature_c: 85
+    failsafe:
+      action: disable
+      timeout_ms: 1000

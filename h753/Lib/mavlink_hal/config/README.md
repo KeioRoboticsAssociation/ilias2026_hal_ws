@@ -296,17 +296,6 @@ pip install -r requirements.txt
 chmod +x validation/config_validator.py
 ```
 
-## Next Steps (Epic2 Task2)
-
-The code generation tool (Epic2 Task2) will:
-- Parse these configuration files
-- Generate platform-specific C/C++ code
-- Create initialization functions
-- Generate MAVLink message handlers
-- Produce build system files
-
-Stay tuned!
-
 ## Additional Resources
 
 - [JSON Schema Documentation](https://json-schema.org/)
@@ -316,6 +305,4 @@ Stay tuned!
 
 ---
 
-**Epic2 Task1** - Configuration Schema Design
-**Status:** Complete
 **Date:** 2025-11-11

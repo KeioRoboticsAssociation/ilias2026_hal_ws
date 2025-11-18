@@ -1,0 +1,258 @@
+# Unified Device Interface Example Configuration
+# This demonstrates code generation for Epic3 unified device interface
+
+platform:
+  type: stm32
+  mcu:
+    model: STM32H753ZI
+    clock_mhz: 480
+    flash_kb: 2048
+    ram_kb: 1024
+
+mavlink:
+  system_id: 1
+  component_id: 1
+  transport:
+    type: udp
+    udp:
+      local_ip: "192.168.11.4"
+      local_port: 14550
+      remote_ip: "192.168.11.2"
+      remote_port: 14550
+
+devices:
+  # ===========================================================================
+  # SERVO DEVICES (IDs 1-9)
+  # ===========================================================================
+
+  - id: 1
+    type: servo
+    name: gripper
+    hardware:
+      timer: 1
+      channel: 1
+    config:
+      servo:
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+        neutral_angle: 0.0
+    limits:
+      min_value: -90.0
+      max_value: 90.0
+    failsafe:
+      action: neutral
+      timeout_ms: 1000
+
+  - id: 2
+    type: servo
+    name: camera_pan
+    hardware:
+      timer: 1
+      channel: 2
+    config:
+      servo:
+        min_pulse_us: 800
+        max_pulse_us: 2200
+        neutral_angle: 0.0
+    limits:
+      min_value: -180.0
+      max_value: 180.0
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  # ===========================================================================
+  # DC MOTOR DEVICES (IDs 10-15)
+  # ===========================================================================
+
+  - id: 10
+    type: dc_motor
+    name: wheel_motor_left
+    hardware:
+      timer_pwm: 2
+      channel_fwd: 1
+      channel_rev: 2
+      timer_encoder: 3
+    config:
+      dc_motor:
+        encoder_counts_per_rev: 2048.0
+        gear_ratio: 19.2
+        pid_position:
+          kp: 0.5
+          ki: 0.01
+          kd: 0.1
+        pid_velocity:
+          kp: 0.12
+          ki: 0.02
+          kd: 0.0
+    limits:
+      min_position: -1000.0
+      max_position: 1000.0
+      max_velocity: 50.0
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 11
+    type: dc_motor
+    name: wheel_motor_right
+    hardware:
+      timer_pwm: 2
+      channel_fwd: 3
+      channel_rev: 4
+      timer_encoder: 4
+    config:
+      dc_motor:
+        encoder_counts_per_rev: 2048.0
+        gear_ratio: 19.2
+        pid_position:
+          kp: 0.5
+          ki: 0.01
+          kd: 0.1
+        pid_velocity:
+          kp: 0.12
+          ki: 0.02
+          kd: 0.0
+    limits:
+      min_position: -1000.0
+      max_position: 1000.0
+      max_velocity: 50.0
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  # ===========================================================================
+  # ROBOMASTER MOTOR DEVICES (IDs 20-29)
+  # ===========================================================================
+
+  - id: 20
+    type: robomaster
+    name: turret_yaw
+    hardware:
+      can_id: 0x205  # GM6020 motor 1
+    config:
+      robomaster:
+        motor_type: GM6020
+        pid_speed:
+          kp: 50.0
+          ki: 0.1
+          kd: 0.0
+        pid_angle:
+          kp: 1.0
+          ki: 0.0
+          kd: 0.5
+    limits:
+      max_speed: 320  # RPM
+      max_current_ma: 10000
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 21
+    type: robomaster
+    name: turret_pitch
+    hardware:
+      can_id: 0x206  # GM6020 motor 2
+    config:
+      robomaster:
+        motor_type: GM6020
+        pid_speed:
+          kp: 50.0
+          ki: 0.1
+          kd: 0.0
+        pid_angle:
+          kp: 1.0
+          ki: 0.0
+          kd: 0.5
+    limits:
+      max_speed: 320
+      max_current_ma: 10000
+    failsafe:
+      action: hold
+      timeout_ms: 1000
+
+  - id: 22
+    type: robomaster
+    name: chassis_fl
+    hardware:
+      can_id: 0x201  # M3508 motor 1
+    config:
+      robomaster:
+        motor_type: M3508
+        pid_speed:
+          kp: 15.0
+          ki: 0.05
+          kd: 0.0
+        pid_angle:
+          kp: 0.5
+          ki: 0.0
+          kd: 0.2
+    limits:
+      max_speed: 9000  # RPM
+      max_current_ma: 16000
+    failsafe:
+      action: disable
+      timeout_ms: 500
+
+  # ===========================================================================
+  # RS485 MOTOR DEVICES (IDs 30-49)
+  # ===========================================================================
+
+  - id: 30
+    type: rs485_motor
+    name: conveyor_motor
+    hardware:
+      uart: 1
+    config:
+      rs485_motor:
+        device_id: 1  # RS485 device ID (DIP switch setting)
+        max_acceleration: 200.0
+    limits:
+      max_speed: 100.0  # RPS
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  - id: 31
+    type: rs485_motor
+    name: elevator_motor
+    hardware:
+      uart: 2
+    config:
+      rs485_motor:
+        device_id: 2
+        max_acceleration: 150.0
+    limits:
+      max_speed: 80.0
+    failsafe:
+      action: disable
+      timeout_ms: 1000
+
+  # ===========================================================================
+  # ENCODER SENSOR DEVICES (IDs 100+)
+  # ===========================================================================
+
+  - id: 100
+    type: encoder
+    name: turret_encoder
+    hardware:
+      timer: 5
+    config:
+      encoder:
+        counts_per_rev: 8192.0
+        gear_ratio: 1.0
+
+  - id: 101
+    type: encoder
+    name: arm_encoder
+    hardware:
+      timer: 8
+    config:
+      encoder:
+        counts_per_rev: 4096.0
+        gear_ratio: 50.0
+
+system:
+  heartbeat_rate_hz: 1
+  main_loop_frequency_hz: 100
+  telemetry_rate_hz: 10

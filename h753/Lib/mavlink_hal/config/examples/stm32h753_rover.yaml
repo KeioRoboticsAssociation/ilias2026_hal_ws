@@ -378,7 +378,7 @@ system:
 
 # Metadata (not part of schema, for documentation)
 metadata:
-  author: "Claude Code"
+  author: "ryosuke"
   version: "1.0.0"
   date: "2025-11-11"
   description: "Complete configuration for STM32H753 rover with servos, DC motors, RoboMaster motors, and RS485 motors"

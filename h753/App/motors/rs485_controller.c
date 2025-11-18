@@ -6,6 +6,7 @@
 #include "rs485_controller.h"
 #include <string.h>
 #include <math.h>
+#include "cmsis_os.h"  // For osDelay()
 
 /* ============================================================================
  * CRC-16 Calculation (Modbus Method)
@@ -32,19 +33,6 @@ uint16_t rs485_calculate_crc16(const uint8_t* data, uint16_t length) {
  * Protocol Helper Functions
  * ============================================================================ */
 
-static error_code_t rs485_send_read_request(uint8_t uart_id, uint8_t motor_id) {
-    rs485_read_request_t packet;
-    packet.header = RS485_HEADER_READ_REQUEST;
-    packet.id = motor_id;
-    packet.crc = rs485_calculate_crc16((uint8_t*)&packet, sizeof(packet) - 2);
-
-    return hw_uart_transmit(uart_id, (uint8_t*)&packet, sizeof(packet));
-}
-
-static error_code_t rs485_receive_response(uint8_t uart_id, uint8_t* buffer, uint16_t size, uint32_t timeout_ms) {
-    return hw_uart_receive(uart_id, buffer, size, timeout_ms);
-}
-
 static bool rs485_verify_crc(const uint8_t* packet, uint16_t packet_size) {
     if (packet_size < 4) return false;
 
@@ -55,6 +43,57 @@ static bool rs485_verify_crc(const uint8_t* packet, uint16_t packet_size) {
     uint16_t received_crc = packet[packet_size - 2] | (packet[packet_size - 1] << 8);
 
     return (calculated_crc == received_crc);
+}
+
+/**
+ * @brief Send packet and receive response with retry logic
+ * @param uart_id UART peripheral ID
+ * @param tx_packet Transmit packet buffer
+ * @param tx_size Transmit packet size
+ * @param rx_buffer Receive buffer
+ * @param rx_size Expected receive size
+ * @param timeout_ms Timeout per attempt
+ * @param max_retries Maximum retry attempts (default: 3)
+ * @return ERROR_OK on success, error code on failure
+ */
+static error_code_t rs485_transact_with_retry(
+    uint8_t uart_id,
+    const uint8_t* tx_packet,
+    uint16_t tx_size,
+    uint8_t* rx_buffer,
+    uint16_t rx_size,
+    uint32_t timeout_ms,
+    uint8_t max_retries)
+{
+    error_code_t err;
+
+    for (uint8_t attempt = 0; attempt < max_retries; attempt++) {
+        // Send packet
+        err = hw_uart_transmit(uart_id, tx_packet, tx_size);
+        if (err != ERROR_OK) {
+            continue;  // Retry on transmit error
+        }
+
+        // Receive response
+        err = hw_uart_receive(uart_id, rx_buffer, rx_size, timeout_ms);
+        if (err == ERROR_OK) {
+            // Verify CRC
+            if (rs485_verify_crc(rx_buffer, rx_size)) {
+                return ERROR_OK;  // Success!
+            }
+            // CRC error, retry
+            err = ERROR_COMM_ERROR;
+        }
+
+        // If not last attempt, continue retrying
+        if (attempt < max_retries - 1) {
+            // Small delay before retry (1ms)
+            osDelay(1);
+        }
+    }
+
+    // All retries exhausted
+    return err;
 }
 
 /* ============================================================================
@@ -68,27 +107,32 @@ error_code_t rs485_read_status(motor_controller_t* controller) {
 
     rs485_private_t* priv = (rs485_private_t*)controller->private_data;
 
-    // Send READ request
-    error_code_t err = rs485_send_read_request(priv->config.uart_id, priv->config.id);
+    // Prepare READ request packet
+    rs485_read_request_t read_packet;
+    read_packet.header = RS485_HEADER_READ_REQUEST;
+    read_packet.id = priv->config.rs485_device_id;
+    read_packet.crc = rs485_calculate_crc16((uint8_t*)&read_packet, sizeof(read_packet) - 2);
+
+    // Send READ request and receive response with retry (up to 3 attempts)
+    uint8_t response_buffer[16];
+    error_code_t err = rs485_transact_with_retry(
+        priv->config.uart_id,
+        (uint8_t*)&read_packet,
+        sizeof(read_packet),
+        response_buffer,
+        16,
+        RS485_TIMEOUT_MS,
+        RS485_MAX_RETRIES
+    );
+
     if (err != ERROR_OK) {
+        if (err == ERROR_TIMEOUT) {
+            priv->timeout_count++;
+        } else if (err == ERROR_COMM_ERROR) {
+            priv->crc_error_count++;
+        }
         priv->consecutive_errors++;
         return err;
-    }
-
-    // Receive response (8 bytes for both velocity and position)
-    uint8_t response_buffer[8];
-    err = rs485_receive_response(priv->config.uart_id, response_buffer, 8, RS485_TIMEOUT_MS);
-    if (err != ERROR_OK) {
-        priv->timeout_count++;
-        priv->consecutive_errors++;
-        return ERROR_TIMEOUT;
-    }
-
-    // Verify CRC
-    if (!rs485_verify_crc(response_buffer, 8)) {
-        priv->crc_error_count++;
-        priv->consecutive_errors++;
-        return ERROR_COMM_ERROR;
     }
 
     // Parse response based on header
@@ -96,30 +140,43 @@ error_code_t rs485_read_status(motor_controller_t* controller) {
     uint8_t id = response_buffer[1];
 
     // Verify ID matches
-    if (id != priv->config.id) {
+    if (id != priv->config.rs485_device_id) {
+        priv->consecutive_errors++;
         return ERROR_COMM_ERROR;
     }
 
     if (header == RS485_HEADER_VEL_RESPONSE) {
-        // Velocity control mode response
+        // Velocity control mode response (3 motors)
         rs485_velocity_response_t* vel_resp = (rs485_velocity_response_t*)response_buffer;
-        priv->current_rps = vel_resp->rps;
+
+        // Store all 3 motor values
+        for (int i = 0; i < 3; i++) {
+            priv->current_rps[i] = vel_resp->rps[i];
+        }
+
         priv->detected_mode = RS485_MODE_VELOCITY;
 
-        // Update motor state
-        controller->state.current_velocity = vel_resp->rps * 2.0f * 3.14159265f;  // RPS to rad/s
+        // Update motor state for THIS motor (based on motor_index)
+        uint8_t idx = priv->motor_index;
+        controller->state.current_velocity = vel_resp->rps[idx] * 2.0f * 3.14159265f;  // RPS to rad/s
 
     } else if (header == RS485_HEADER_POS_RESPONSE) {
-        // Position control mode response
+        // Position control mode response (3 motors)
         rs485_position_response_t* pos_resp = (rs485_position_response_t*)response_buffer;
-        priv->current_count = pos_resp->count;
-        priv->current_rotation = pos_resp->rotation;
+
+        // Store all 3 motor values
+        for (int i = 0; i < 3; i++) {
+            priv->current_count[i] = pos_resp->count[i];
+            priv->current_rotation[i] = pos_resp->rotation[i];
+        }
+
         priv->detected_mode = RS485_MODE_POSITION;
 
-        // Update motor state
+        // Update motor state for THIS motor (based on motor_index)
+        uint8_t idx = priv->motor_index;
         // Total position = (rotation * 8192) + count
         // Encoder resolution is 2048 x 4 = 8192 counts/revolution
-        float total_counts = (float)pos_resp->rotation * 8192.0f + (float)pos_resp->count;
+        float total_counts = (float)pos_resp->rotation[idx] * 8192.0f + (float)pos_resp->count[idx];
         controller->state.current_position = total_counts * (2.0f * 3.14159265f / 8192.0f);  // counts to radians
 
     } else {
@@ -137,30 +194,40 @@ error_code_t rs485_write_command(motor_controller_t* controller, const motor_com
     }
 
     rs485_private_t* priv = (rs485_private_t*)controller->private_data;
+    uint8_t idx = priv->motor_index;  // Motor index on the board (0-2)
 
+    uint8_t tx_buffer[16];
+    uint8_t response_buffer[16];
     error_code_t err;
 
     if (priv->detected_mode == RS485_MODE_VELOCITY) {
-        // Velocity control mode - send RPS command
-        rs485_velocity_write_t packet;
-        packet.header = RS485_HEADER_WRITE;
-        packet.id = priv->config.id;
+        // Velocity control mode - send RPS command for all 3 motors
+        rs485_velocity_write_t* packet = (rs485_velocity_write_t*)tx_buffer;
+        packet->header = RS485_HEADER_WRITE;
+        packet->id = priv->config.rs485_device_id;
 
-        // Convert command to RPS based on mode
+        // Initialize all 3 motor values with their last known/commanded values
+        // (Other motors on same board get their last values, this motor gets new command)
+        for (int i = 0; i < 3; i++) {
+            packet->target_rps[i] = priv->current_rps[i];  // Preserve other motors' values
+        }
+
+        // Convert command to RPS based on mode for THIS motor
+        float target_rps;
         switch (cmd->mode) {
             case CONTROL_MODE_VELOCITY:
                 // rad/s to RPS
-                packet.target_rps = cmd->target_value / (2.0f * 3.14159265f);
+                target_rps = cmd->target_value / (2.0f * 3.14159265f);
                 break;
 
             case CONTROL_MODE_DUTY_CYCLE:
                 // Map -1.0 to 1.0 → max RPS range
-                packet.target_rps = cmd->target_value * priv->config.max_rps;
+                target_rps = cmd->target_value * priv->config.max_rps;
                 break;
 
             case CONTROL_MODE_CURRENT:
                 // Direct RPS value
-                packet.target_rps = cmd->target_value;
+                target_rps = cmd->target_value;
                 break;
 
             default:
@@ -168,58 +235,142 @@ error_code_t rs485_write_command(motor_controller_t* controller, const motor_com
         }
 
         // Constrain RPS
-        if (packet.target_rps > priv->config.max_rps) packet.target_rps = priv->config.max_rps;
-        if (packet.target_rps < -priv->config.max_rps) packet.target_rps = -priv->config.max_rps;
+        if (target_rps > priv->config.max_rps) target_rps = priv->config.max_rps;
+        if (target_rps < -priv->config.max_rps) target_rps = -priv->config.max_rps;
+
+        // Update only THIS motor's value in the packet
+        packet->target_rps[idx] = target_rps;
+
+        // Update cache for next time
+        priv->current_rps[idx] = target_rps;
 
         // Calculate CRC
-        packet.crc = rs485_calculate_crc16((uint8_t*)&packet, sizeof(packet) - 2);
+        packet->crc = rs485_calculate_crc16(tx_buffer, sizeof(rs485_velocity_write_t) - 2);
 
-        // Transmit
-        err = hw_uart_transmit(priv->config.uart_id, (uint8_t*)&packet, sizeof(packet));
+        // Send WRITE and receive response with retry
+        err = rs485_transact_with_retry(
+            priv->config.uart_id,
+            tx_buffer,
+            sizeof(rs485_velocity_write_t),
+            response_buffer,
+            16,
+            RS485_TIMEOUT_MS,
+            RS485_MAX_RETRIES
+        );
 
     } else if (priv->detected_mode == RS485_MODE_POSITION) {
-        // Position control mode - send count + rotation command
-        rs485_position_write_t packet;
-        packet.header = RS485_HEADER_WRITE;
-        packet.id = priv->config.id;
+        // Position control mode - send count + rotation command for all 3 motors
+        rs485_position_write_t* packet = (rs485_position_write_t*)tx_buffer;
+        packet->header = RS485_HEADER_WRITE;
+        packet->id = priv->config.rs485_device_id;
 
-        // Convert command to count + rotation based on mode
+        // Initialize all 3 motor values with their last known values
+        for (int i = 0; i < 3; i++) {
+            packet->target_count[i] = priv->current_count[i];
+            packet->target_rotation[i] = priv->current_rotation[i];
+        }
+
+        // Convert command to count + rotation based on mode for THIS motor
         if (cmd->mode == CONTROL_MODE_POSITION) {
             // radians to counts
             float target_radians = cmd->target_value;
             float total_counts = target_radians * (8192.0f / (2.0f * 3.14159265f));
 
             // Split into rotation and count
-            packet.target_rotation = (int16_t)(total_counts / 8192.0f);
-            packet.target_count = (int16_t)((int32_t)total_counts % 8192);
+            int16_t target_rotation = (int16_t)(total_counts / 8192.0f);
+            int16_t target_count = (int16_t)((int32_t)total_counts % 8192);
+
+            // Constrain values
+            if (target_rotation > priv->config.max_rotation) {
+                target_rotation = priv->config.max_rotation;
+            }
+            if (target_rotation < -priv->config.max_rotation) {
+                target_rotation = -priv->config.max_rotation;
+            }
+
+            // Update only THIS motor's value in the packet
+            packet->target_rotation[idx] = target_rotation;
+            packet->target_count[idx] = target_count;
+
+            // Update cache for next time
+            priv->current_rotation[idx] = target_rotation;
+            priv->current_count[idx] = target_count;
 
         } else {
             return ERROR_INVALID_PARAMETER;  // Position mode only supports position commands
         }
 
-        // Constrain values
-        if (packet.target_rotation > priv->config.max_rotation) {
-            packet.target_rotation = priv->config.max_rotation;
-        }
-        if (packet.target_rotation < -priv->config.max_rotation) {
-            packet.target_rotation = -priv->config.max_rotation;
-        }
-
         // Calculate CRC
-        packet.crc = rs485_calculate_crc16((uint8_t*)&packet, sizeof(packet) - 2);
+        packet->crc = rs485_calculate_crc16(tx_buffer, sizeof(rs485_position_write_t) - 2);
 
-        // Transmit
-        err = hw_uart_transmit(priv->config.uart_id, (uint8_t*)&packet, sizeof(packet));
+        // Send WRITE and receive response with retry
+        err = rs485_transact_with_retry(
+            priv->config.uart_id,
+            tx_buffer,
+            sizeof(rs485_position_write_t),
+            response_buffer,
+            16,
+            RS485_TIMEOUT_MS,
+            RS485_MAX_RETRIES
+        );
 
     } else {
         return ERROR_NOT_INITIALIZED;  // Mode not detected yet
     }
 
     if (err != ERROR_OK) {
+        if (err == ERROR_TIMEOUT) {
+            priv->timeout_count++;
+        } else if (err == ERROR_COMM_ERROR) {
+            priv->crc_error_count++;
+        }
         priv->consecutive_errors++;
         return err;
     }
 
+    // Parse response to update motor state (motor returns current status after WRITE)
+    uint8_t header = response_buffer[0];
+    uint8_t id = response_buffer[1];
+
+    // Verify ID matches
+    if (id != priv->config.rs485_device_id) {
+        priv->consecutive_errors++;
+        return ERROR_COMM_ERROR;
+    }
+
+    if (header == RS485_HEADER_VEL_RESPONSE) {
+        // Velocity control mode response (3 motors)
+        rs485_velocity_response_t* vel_resp = (rs485_velocity_response_t*)response_buffer;
+
+        // Store all 3 motor values
+        for (int i = 0; i < 3; i++) {
+            priv->current_rps[i] = vel_resp->rps[i];
+        }
+
+        // Update motor state for THIS motor (based on motor_index)
+        controller->state.current_velocity = vel_resp->rps[idx] * 2.0f * 3.14159265f;  // RPS to rad/s
+
+    } else if (header == RS485_HEADER_POS_RESPONSE) {
+        // Position control mode response (3 motors)
+        rs485_position_response_t* pos_resp = (rs485_position_response_t*)response_buffer;
+
+        // Store all 3 motor values
+        for (int i = 0; i < 3; i++) {
+            priv->current_count[i] = pos_resp->count[i];
+            priv->current_rotation[i] = pos_resp->rotation[i];
+        }
+
+        // Update motor state for THIS motor (based on motor_index)
+        // Total position = (rotation * 8192) + count
+        float total_counts = (float)pos_resp->rotation[idx] * 8192.0f + (float)pos_resp->count[idx];
+        controller->state.current_position = total_counts * (2.0f * 3.14159265f / 8192.0f);  // counts to radians
+
+    } else {
+        priv->consecutive_errors++;
+        return ERROR_COMM_ERROR;
+    }
+
+    priv->last_response_time = hw_get_tick();
     priv->consecutive_errors = 0;
     return ERROR_OK;
 }
@@ -248,6 +399,7 @@ static error_code_t rs485_initialize(motor_controller_t* controller) {
     // Initialize private data
     priv->last_watchdog_reset = hw_get_tick();
     priv->last_response_time = hw_get_tick();
+    priv->last_status_read_time = hw_get_tick();
     priv->watchdog_expired = false;
     priv->consecutive_errors = 0;
     priv->crc_error_count = 0;
@@ -292,16 +444,22 @@ static error_code_t rs485_update(motor_controller_t* controller, float delta_tim
         }
     }
 
-    // Periodic status read (every 100ms)
-    static uint32_t last_status_read = 0;
-    if (now - last_status_read > 100) {
-        rs485_read_status(controller);
-        last_status_read = now;
+    // Periodic status read (every RS485_STATUS_READ_INTERVAL_MS)
+    // This ensures we always have fresh feedback from the motor
+    if (now - priv->last_status_read_time >= RS485_STATUS_READ_INTERVAL_MS) {
+        error_code_t read_err = rs485_read_status(controller);
+        priv->last_status_read_time = now;
+
+        // If read fails after retries, mark error but continue operation
+        if (read_err != ERROR_OK && controller->state.status == ERROR_OK) {
+            controller->state.status = read_err;
+        }
     }
 
-    // Check for excessive errors
+    // Check for excessive consecutive errors (timeout after 3 failures)
     if (priv->consecutive_errors >= RS485_MAX_RETRIES) {
         controller->state.status = ERROR_COMM_ERROR;
+        controller->state.enabled = false;  // Disable motor on persistent comm failure
     }
 
     controller->state.last_update_time = now;
@@ -463,6 +621,7 @@ error_code_t rs485_controller_create(
     // Initialize private data
     memset(private_data, 0, sizeof(rs485_private_t));
     private_data->config = *config;
+    private_data->motor_index = config->motor_index;  // Set motor index (0-2)
     private_data->detected_mode = config->control_mode;
 
     return ERROR_OK;

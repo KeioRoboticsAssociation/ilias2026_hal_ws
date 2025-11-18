@@ -31,16 +31,17 @@
 #include "stm32h7xx_nucleo.h"
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
-#include "../../App/motors/motor_registry.h"
 #include "../../App/motors/robomaster_controller.h"
 #include "../../App/config/parameter_manager.h"
+
+/* Generated MAVLink HAL code - replaces motor_registry */
+#include "mavlink_generated_config.h"
 #include "fdcan.h"
 #include "usart.h"
 
 extern FDCAN_HandleTypeDef hfdcan1;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
-extern motor_registry_t g_motor_registry;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -81,77 +82,13 @@ osThreadId defaultTaskHandle;
   */
 void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handler)
 {
-  // Handle different MAVLink message types
+  // Use generated MAVLink handler for motor control messages
+  // (handles RC_CHANNELS_OVERRIDE, MOTOR_COMMAND, MANUAL_CONTROL, etc.)
+  mavlink_gen_handle_message(msg, MAVLINK_COMM_0);
+
+  // Keep original parameter handling for backward compatibility
+  // TODO: Migrate to generated parameter system
   switch (msg->msgid) {
-    case MAVLINK_MSG_ID_HEARTBEAT:
-    {
-      // Handle heartbeat message
-      mavlink_heartbeat_t heartbeat;
-      mavlink_msg_heartbeat_decode(msg, &heartbeat);
-      // Echo back heartbeat or process as needed
-      break;
-    }
-
-    case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
-    {
-      if (!motors_initialized) break;
-
-      // Handle RC channels override for motor control
-      mavlink_rc_channels_override_t rc_override;
-      mavlink_msg_rc_channels_override_decode(msg, &rc_override);
-
-      // Map RC channels to motors (channels 1-8, typically 1000-2000 us PWM)
-      // Channel 1 -> Motor ID 1, Channel 2 -> Motor ID 2, etc.
-      uint16_t channels[8] = {
-        rc_override.chan1_raw, rc_override.chan2_raw, rc_override.chan3_raw,
-        rc_override.chan4_raw, rc_override.chan5_raw, rc_override.chan6_raw,
-        rc_override.chan7_raw, rc_override.chan8_raw
-      };
-
-      for (int i = 0; i < 8; i++) {
-        if (channels[i] == UINT16_MAX || channels[i] == 0) {
-          continue;  // Channel not set
-        }
-
-        motor_command_t cmd = {0};
-        cmd.motor_id = i + 1;  // Motor IDs 1-8
-        cmd.timestamp = HAL_GetTick();
-        cmd.enable = (channels[i] > 900 && channels[i] < 2100);
-
-        // Convert PWM to appropriate control value
-        // For servos: map 1000-2000us to -90 to +90 degrees
-        // For DC motors: map 1000-2000us to -1.0 to +1.0 duty cycle
-        float normalized = (float)(channels[i] - 1500) / 500.0f;  // -1.0 to +1.0
-
-        // Check motor type and set appropriate command
-        motor_controller_t* controller = motor_registry_get(cmd.motor_id);
-        if (controller) {
-          if (controller->type == MOTOR_TYPE_SERVO) {
-            cmd.mode = CONTROL_MODE_POSITION;
-            cmd.target_value = normalized * 90.0f;  // -90 to +90 degrees
-          } else {
-            cmd.mode = CONTROL_MODE_DUTY_CYCLE;
-            cmd.target_value = normalized;  // -1.0 to +1.0
-          }
-
-          motor_registry_send_command(cmd.motor_id, &cmd);
-        }
-      }
-      break;
-    }
-
-    case MAVLINK_MSG_ID_MANUAL_CONTROL:
-    {
-      if (!motors_initialized) break;
-
-      // Handle manual control (joystick-like inputs)
-      mavlink_manual_control_t manual;
-      mavlink_msg_manual_control_decode(msg, &manual);
-
-      // manual.x, manual.y, manual.z, manual.r are normalized -1000 to 1000
-      // Map to motors as needed for your application
-      break;
-    }
 
     case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
     {
@@ -255,26 +192,6 @@ void mavlink_message_handler(const mavlink_message_t *msg, mavlink_udp_t *handle
       break;
     }
 
-    case MAVLINK_MSG_ID_MOTOR_COMMAND:
-    {
-      if (!motors_initialized) break;
-
-      // Handle generic motor command for RS485 and extended motor IDs
-      mavlink_motor_command_t motor_cmd_msg;
-      mavlink_msg_motor_command_decode(msg, &motor_cmd_msg);
-
-      motor_command_t cmd = {0};
-      cmd.motor_id = motor_cmd_msg.motor_id;
-      cmd.mode = (control_mode_t)motor_cmd_msg.control_mode;
-      cmd.target_value = motor_cmd_msg.target_value;
-      cmd.enable = motor_cmd_msg.enable;
-      cmd.timestamp = HAL_GetTick();
-
-      // Send command to motor registry
-      motor_registry_send_command(cmd.motor_id, &cmd);
-      break;
-    }
-
     default:
       // Unknown message, ignore or log
       break;
@@ -304,7 +221,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         // Search through all motors to find matching RoboMaster controller
         for (uint8_t motor_id = 20; motor_id < 30; motor_id++)  // RoboMaster IDs: 20-29
         {
-          motor_controller_t* controller = motor_registry_get(motor_id);
+          motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
           if (controller && controller->type == MOTOR_TYPE_ROBOMASTER)
           {
             // Pass message to RoboMaster controller for processing
@@ -499,10 +416,10 @@ void StartDefaultTask(void const * argument)
     }
   }
 
-  // Initialize motor registry
-  hw_err = motor_registry_init();
-  if (hw_err != ERROR_OK) {
-    // Motor registry init failed - slow blink RED LED
+  // Initialize all devices from generated configuration
+  int init_result = mavlink_gen_init_all_devices();
+  if (init_result != 0) {
+    // Device initialization failed - slow blink RED LED
     while(1) {
       BSP_LED_On(LED3);
       osDelay(200);
@@ -511,19 +428,8 @@ void StartDefaultTask(void const * argument)
     }
   }
 
-  // Create all motors from configuration
-  // Note: Motors without proper hardware (missing timers/UARTs) will be skipped automatically
-  // The system will work with whatever motors successfully initialize
-  hw_err = motor_registry_create_all_motors();
-  // Always enable motor system - it will work with successfully initialized motors only
+  // Motor system initialized successfully
   motors_initialized = true;
-
-  // Log motor count for diagnostics
-  if (g_motor_registry.motor_count > 0) {
-    // At least some motors initialized successfully
-  } else {
-    // No motors initialized - check hardware connections and CubeMX configuration
-  }
 
   // Initialize parameter manager (for PID tuning via MAVLink)
   hw_err = param_manager_init();
@@ -551,8 +457,7 @@ void StartDefaultTask(void const * argument)
 
     // Update motors at 100 Hz
     if (motors_initialized && (current_time - last_motor_update_time >= motor_update_interval)) {
-      float delta_time = (current_time - last_motor_update_time) / 1000.0f;
-      motor_registry_update_all(delta_time);
+      mavlink_gen_update_all_devices();
       last_motor_update_time = current_time;
     }
 
@@ -573,7 +478,7 @@ void StartDefaultTask(void const * argument)
     if (motors_initialized && (current_time - last_motor_status_time >= motor_status_interval)) {
       // Send status for all active RoboMaster motors (IDs 20-29)
       for (uint8_t motor_id = 20; motor_id < 30; motor_id++) {
-        motor_controller_t* controller = motor_registry_get(motor_id);
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
         if (controller && controller->type == MOTOR_TYPE_ROBOMASTER) {
           motor_state_t state = motor_get_state(controller);
 

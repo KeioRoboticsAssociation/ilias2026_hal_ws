@@ -54,11 +54,15 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/motors/dc_controller.c
     App/motors/robomaster_controller.c
     App/motors/rs485_controller.c
-    App/motors/motor_registry.c
+    # App/motors/motor_registry.c  # REMOVED: Replaced by generated code
     App/config/parameter_manager.c
 
     # Portable MAVLink HAL (Epic1 Task1)
     Lib/mavlink_hal/platforms/stm32/mavlink_hal_stm32.c
+
+    # Generated MAVLink HAL code (Epic2-4: YAML → C)
+    Lib/mavlink_hal/config/generated/h753_full/mavlink_generated_devices.c
+    Lib/mavlink_hal/config/generated/h753_full/mavlink_generated_handlers.c
 )
 
 # Add include paths
@@ -75,6 +79,9 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
     # Portable MAVLink HAL (Epic1 Task1)
     Lib/mavlink_hal/include
+
+    # Generated MAVLink HAL code (Epic2-4: YAML → C)
+    Lib/mavlink_hal/config/generated/h753_full
 )
 
 # Add project symbols (macros)

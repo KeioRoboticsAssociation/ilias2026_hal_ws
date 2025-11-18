@@ -28,51 +28,52 @@ extern "C" {
 
 // Communication parameters
 #define RS485_BAUDRATE                  500000
-#define RS485_TIMEOUT_MS                5      // Response timeout
-#define RS485_MAX_RETRIES               3
+#define RS485_TIMEOUT_MS                5      // Response timeout per attempt
+#define RS485_MAX_RETRIES               3      // Maximum retry attempts
+#define RS485_STATUS_READ_INTERVAL_MS   100    // Periodic status read interval
 
 /* ============================================================================
  * RS485 Protocol Packets
  * ============================================================================ */
 
-// READ request packet (4 bytes)
+// READ request packet (4 bytes) - unchanged
 typedef struct __attribute__((packed)) {
     uint8_t header;     // 0xAA
     uint8_t id;         // 1-8
     uint16_t crc;       // CRC-16 Modbus (little-endian)
 } rs485_read_request_t;
 
-// Velocity control response packet (8 bytes)
+// Velocity control response packet (16 bytes) - 3 motors
 typedef struct __attribute__((packed)) {
     uint8_t header;     // 0x55
     uint8_t id;         // 1-8
-    float rps;          // Current RPS (revolutions per second)
+    float rps[3];       // Current RPS for 3 motors (3 × 4 bytes = 12 bytes)
     uint16_t crc;       // CRC-16 Modbus (little-endian)
 } rs485_velocity_response_t;
 
-// Position control response packet (8 bytes)
+// Position control response packet (16 bytes) - 3 motors
 typedef struct __attribute__((packed)) {
     uint8_t header;     // 0x56
     uint8_t id;         // 1-8
-    int16_t count;      // Encoder count value
-    int16_t rotation;   // Number of rotations
+    int16_t count[3];      // Encoder count values for 3 motors (3 × 2 bytes)
+    int16_t rotation[3];   // Number of rotations for 3 motors (3 × 2 bytes)
     uint16_t crc;       // CRC-16 Modbus (little-endian)
 } rs485_position_response_t;
 
-// WRITE packet for velocity control (8 bytes)
+// WRITE packet for velocity control (16 bytes) - 3 motors
 typedef struct __attribute__((packed)) {
-    uint8_t header;     // 0xBB
-    uint8_t id;         // 1-8
-    float target_rps;   // Target RPS (revolutions per second)
-    uint16_t crc;       // CRC-16 Modbus (little-endian)
+    uint8_t header;       // 0xBB
+    uint8_t id;           // 1-8
+    float target_rps[3];  // Target RPS for 3 motors (3 × 4 bytes = 12 bytes)
+    uint16_t crc;         // CRC-16 Modbus (little-endian)
 } rs485_velocity_write_t;
 
-// WRITE packet for position control (8 bytes)
+// WRITE packet for position control (16 bytes) - 3 motors
 typedef struct __attribute__((packed)) {
     uint8_t header;     // 0xBB
     uint8_t id;         // 1-8
-    int16_t target_count;    // Target count
-    int16_t target_rotation; // Target rotation
+    int16_t target_count[3];    // Target count for 3 motors (3 × 2 bytes)
+    int16_t target_rotation[3]; // Target rotation for 3 motors (3 × 2 bytes)
     uint16_t crc;       // CRC-16 Modbus (little-endian)
 } rs485_position_write_t;
 
@@ -84,17 +85,21 @@ typedef struct {
     uint32_t last_watchdog_reset;
     bool watchdog_expired;
     uint32_t last_response_time;
+    uint32_t last_status_read_time;  // Timestamp of last periodic status read
+
+    // Motor index on the board (0-2 for 3 motors per board)
+    uint8_t motor_index;
 
     // Protocol state
     rs485_control_mode_t detected_mode;
     uint8_t consecutive_errors;
 
-    // Feedback data (velocity mode)
-    float current_rps;
+    // Feedback data (velocity mode) - all 3 motors on the board
+    float current_rps[3];
 
-    // Feedback data (position mode)
-    int16_t current_count;
-    int16_t current_rotation;
+    // Feedback data (position mode) - all 3 motors on the board
+    int16_t current_count[3];
+    int16_t current_rotation[3];
 
     // Statistics
     uint32_t crc_error_count;

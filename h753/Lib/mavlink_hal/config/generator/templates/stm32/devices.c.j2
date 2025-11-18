@@ -12,6 +12,9 @@
  */
 
 #include "mavlink_generated_config.h"
+
+/* Include parameter implementation in this compilation unit */
+#define MAVLINK_GENERATED_PARAMS_IMPLEMENTATION
 #include "mavlink_generated_params.h"
 
 /* Include platform-specific headers */
@@ -25,20 +28,20 @@
 
 /* Include motor controllers */
 {% if servo_count > 0 %}
-#include "App/motors/servo_controller.h"
+#include "motors/servo_controller.h"
 {% endif %}
 {% if dc_motor_count > 0 %}
-#include "App/motors/dc_controller.h"
+#include "motors/dc_controller.h"
 {% endif %}
 {% if robomaster_count > 0 %}
-#include "App/motors/robomaster_controller.h"
+#include "motors/robomaster_controller.h"
 {% endif %}
 {% if rs485_motor_count > 0 %}
-#include "App/motors/rs485_controller.h"
+#include "motors/rs485_controller.h"
 {% endif %}
 
 /* Include hardware manager */
-#include "App/hal/hardware_manager.h"
+#include "hal/hardware_manager.h"
 
 /* ========================================================================== */
 /*  SERVO CONFIGURATION DATA                                                  */
@@ -66,8 +69,10 @@ const mavlink_gen_servo_config_t mavlink_gen_servo_configs[MAVLINK_GEN_SERVO_COU
 {% endfor %}
 };
 
-/* Servo controller instances */
-static servo_controller_t* servo_controllers[MAVLINK_GEN_SERVO_COUNT];
+/* Servo controller storage */
+static motor_controller_t servo_controllers_storage[MAVLINK_GEN_SERVO_COUNT];
+static servo_private_t servo_private_data[MAVLINK_GEN_SERVO_COUNT];
+static motor_controller_t* servo_controllers[MAVLINK_GEN_SERVO_COUNT];
 {% endif %}
 
 /* ========================================================================== */
@@ -82,6 +87,11 @@ const mavlink_gen_dc_motor_config_t mavlink_gen_dc_motor_configs[MAVLINK_GEN_DC_
         .name = "{{ device.name }}",
         .timer_id = {{ device.hardware.timer }},
         .channel = TIM_CHANNEL_{{ device.hardware.channel }},
+{% if device.hardware.pins and device.hardware.pins.dir %}
+        .dir_pin = "{{ device.hardware.pins.dir }}",
+{% else %}
+        .dir_pin = NULL,
+{% endif %}
 {% if device.limits and device.limits.max_speed %}
         .max_rpm = {{ device.limits.max_speed | format_float }},
 {% else %}
@@ -93,12 +103,19 @@ const mavlink_gen_dc_motor_config_t mavlink_gen_dc_motor_configs[MAVLINK_GEN_DC_
 {% else %}
         .encoder_ppr = 0,
 {% endif %}
+{% if device.config.dc_motor.direction_inverted %}
+        .direction_inverted = {{ 'true' if device.config.dc_motor.direction_inverted else 'false' }},
+{% else %}
+        .direction_inverted = false,
+{% endif %}
     },
 {% endfor %}
 };
 
-/* DC motor controller instances */
-static dc_motor_controller_t* dc_motor_controllers[MAVLINK_GEN_DC_MOTOR_COUNT];
+/* DC motor controller storage */
+static motor_controller_t dc_motor_controllers_storage[MAVLINK_GEN_DC_MOTOR_COUNT];
+static dc_motor_private_t dc_motor_private_data[MAVLINK_GEN_DC_MOTOR_COUNT];
+static motor_controller_t* dc_motor_controllers[MAVLINK_GEN_DC_MOTOR_COUNT];
 {% endif %}
 
 /* ========================================================================== */
@@ -127,8 +144,10 @@ const mavlink_gen_robomaster_config_t mavlink_gen_robomaster_configs[MAVLINK_GEN
 {% endfor %}
 };
 
-/* RoboMaster controller instances */
-static robomaster_controller_t* robomaster_controllers[MAVLINK_GEN_ROBOMASTER_COUNT];
+/* RoboMaster controller storage */
+static motor_controller_t robomaster_controllers_storage[MAVLINK_GEN_ROBOMASTER_COUNT];
+static robomaster_private_t robomaster_private_data[MAVLINK_GEN_ROBOMASTER_COUNT];
+static motor_controller_t* robomaster_controllers[MAVLINK_GEN_ROBOMASTER_COUNT];
 {% endif %}
 
 /* ========================================================================== */
@@ -141,8 +160,9 @@ const mavlink_gen_rs485_config_t mavlink_gen_rs485_configs[MAVLINK_GEN_RS485_MOT
     {
         .id = {{ device.id }},
         .name = "{{ device.name }}",
-        .uart_port = {{ device.hardware.uart_port }},
+        .uart_port = {{ device.hardware.uart | uart_to_number }},
         .rs485_device_id = {{ device.config.rs485_motor.device_id }},
+        .motor_index = {{ device.config.rs485_motor.motor_index | default(0) }},
         .control_mode = RS485_MODE_{{ device.config.rs485_motor.control_mode | to_upper }},
 {% if device.limits and device.limits.max_speed %}
         .max_rps = {{ device.limits.max_speed | format_float }},
@@ -153,8 +173,10 @@ const mavlink_gen_rs485_config_t mavlink_gen_rs485_configs[MAVLINK_GEN_RS485_MOT
 {% endfor %}
 };
 
-/* RS485 controller instances */
-static rs485_controller_t* rs485_controllers[MAVLINK_GEN_RS485_MOTOR_COUNT];
+/* RS485 controller storage */
+static motor_controller_t rs485_controllers_storage[MAVLINK_GEN_RS485_MOTOR_COUNT];
+static rs485_private_t rs485_private_data[MAVLINK_GEN_RS485_MOTOR_COUNT];
+static motor_controller_t* rs485_controllers[MAVLINK_GEN_RS485_MOTOR_COUNT];
 {% endif %}
 
 /* ========================================================================== */
@@ -237,15 +259,34 @@ int mavlink_gen_init_all_devices(void) {
 
         servo_config_t servo_cfg = {
             .id = cfg->id,
-            .timer_id = cfg->timer_id,
-            .channel = cfg->channel,
-            .min_pulse_us = cfg->min_pulse_us,
-            .max_pulse_us = cfg->max_pulse_us,
-            .enabled = true,
+            .initial_offset = 0.0f,
+            .min_angle = cfg->min_angle,
+            .max_angle = cfg->max_angle,
+            .pulse_min_us = cfg->min_pulse_us,
+            .pulse_max_us = cfg->max_pulse_us,
+            .pulse_neutral_us = (cfg->min_pulse_us + cfg->max_pulse_us) / 2,
+            .direction_inverted = false,
+            .max_velocity_deg_per_s = 120.0f,
+            .max_acceleration_deg_per_s2 = 240.0f,
+            .watchdog_timeout_ms = 1000,
+            .startup_angle_deg = cfg->neutral_angle,
+            .start_disabled = false,
+            .failsafe_behavior = SERVO_FAILSAFE_NEUTRAL,
         };
 
-        servo_controllers[i] = servo_controller_create(&servo_cfg);
-        if (!servo_controllers[i]) {
+        error_code_t err = servo_controller_create(
+            cfg->id,
+            cfg->timer_id,
+            cfg->channel,
+            &servo_cfg,
+            &servo_controllers_storage[i],
+            &servo_private_data[i]
+        );
+
+        if (err == ERROR_OK) {
+            servo_controllers[i] = &servo_controllers_storage[i];
+        } else {
+            servo_controllers[i] = NULL;
             result = -1;
             /* Continue to initialize other devices */
         }
@@ -259,16 +300,43 @@ int mavlink_gen_init_all_devices(void) {
 
         dc_motor_config_t dc_cfg = {
             .id = cfg->id,
-            .timer_id = cfg->timer_id,
-            .channel = cfg->channel,
-            .max_duty_cycle = 1.0f,
-            .has_encoder = cfg->has_encoder,
-            .encoder_ppr = cfg->encoder_ppr,
-            .enabled = true,
+            // Speed PID gains
+            .speed_kp = 0.1f,
+            .speed_ki = 0.05f,
+            .speed_kd = 0.0f,
+            .speed_max_integral = 0.3f,
+            .speed_max_output = 1.0f,
+            // Position PID gains
+            .position_kp = 0.5f,
+            .position_ki = 0.0f,
+            .position_kd = 0.1f,
+            .position_max_integral = 100.0f,
+            .position_max_output = 10.0f,
+            // Limits
+            .max_speed_rad_s = 15.0f,
+            .max_acceleration_rad_s2 = 50.0f,
+            .position_limit_min_rad = -314.159f,
+            .position_limit_max_rad = 314.159f,
+            .use_position_limits = true,
+            // Control
+            .watchdog_timeout_ms = 1000,
+            .control_period_ms = 10,
+            .direction_inverted = cfg->direction_inverted,
         };
 
-        dc_motor_controllers[i] = dc_motor_controller_create(&dc_cfg);
-        if (!dc_motor_controllers[i]) {
+        error_code_t err = dc_motor_controller_create(
+            cfg->id,
+            cfg->timer_id,
+            cfg->channel,
+            &dc_cfg,
+            &dc_motor_controllers_storage[i],
+            &dc_motor_private_data[i]
+        );
+
+        if (err == ERROR_OK) {
+            dc_motor_controllers[i] = &dc_motor_controllers_storage[i];
+        } else {
+            dc_motor_controllers[i] = NULL;
             result = -1;
         }
     }
@@ -282,12 +350,31 @@ int mavlink_gen_init_all_devices(void) {
         robomaster_config_t rm_cfg = {
             .id = cfg->id,
             .can_id = cfg->can_id,
-            .motor_type = cfg->motor_type,
-            .enabled = true,
+            // Angle PID gains
+            .angle_kp = 0.1f,
+            .angle_ki = 0.0f,
+            .angle_kd = 0.0f,
+            // Speed PID gains (tunable via MAVLink params)
+            .speed_kp = 50.0f,
+            .speed_ki = 0.1f,
+            .speed_kd = 0.0f,
+            // Limits
+            .max_speed_rad_s = 10.0f,
+            .max_acceleration_rad_s2 = 30.0f,
+            .watchdog_timeout_ms = 500,
         };
 
-        robomaster_controllers[i] = robomaster_controller_create(&rm_cfg);
-        if (!robomaster_controllers[i]) {
+        error_code_t err = robomaster_controller_create(
+            cfg->id,
+            &rm_cfg,
+            &robomaster_controllers_storage[i],
+            &robomaster_private_data[i]
+        );
+
+        if (err == ERROR_OK) {
+            robomaster_controllers[i] = &robomaster_controllers_storage[i];
+        } else {
+            robomaster_controllers[i] = NULL;
             result = -1;
         }
     }
@@ -301,14 +388,28 @@ int mavlink_gen_init_all_devices(void) {
         rs485_config_t rs485_cfg = {
             .id = cfg->id,
             .rs485_device_id = cfg->rs485_device_id,
+            .motor_index = cfg->motor_index,
             .uart_id = cfg->uart_port,
             .control_mode = cfg->control_mode,
             .max_rps = cfg->max_rps,
-            .enabled = true,
+            .max_acceleration_rps2 = 200.0f,
+            .max_count = 8192,
+            .max_rotation = 100,
+            .watchdog_timeout_ms = 1000,
+            .retry_count = 3,
         };
 
-        rs485_controllers[i] = rs485_controller_create(&rs485_cfg);
-        if (!rs485_controllers[i]) {
+        error_code_t err = rs485_controller_create(
+            cfg->id,
+            &rs485_cfg,
+            &rs485_controllers_storage[i],
+            &rs485_private_data[i]
+        );
+
+        if (err == ERROR_OK) {
+            rs485_controllers[i] = &rs485_controllers_storage[i];
+        } else {
+            rs485_controllers[i] = NULL;
             result = -1;
         }
     }
@@ -322,11 +423,16 @@ int mavlink_gen_init_all_devices(void) {
 /* ========================================================================== */
 
 int mavlink_gen_update_all_devices(void) {
+    static uint32_t last_time_ms = 0;
+    uint32_t current_time_ms = HAL_GetTick();
+    float delta_time = (last_time_ms == 0) ? 0.01f : (current_time_ms - last_time_ms) / 1000.0f;
+    last_time_ms = current_time_ms;
+
 {% if servo_count > 0 %}
     /* Update servos */
     for (int i = 0; i < MAVLINK_GEN_SERVO_COUNT; i++) {
         if (servo_controllers[i]) {
-            servo_controller_update(servo_controllers[i]);
+            motor_update(servo_controllers[i], delta_time);
         }
     }
 {% endif %}
@@ -335,7 +441,7 @@ int mavlink_gen_update_all_devices(void) {
     /* Update DC motors */
     for (int i = 0; i < MAVLINK_GEN_DC_MOTOR_COUNT; i++) {
         if (dc_motor_controllers[i]) {
-            dc_motor_controller_update(dc_motor_controllers[i]);
+            motor_update(dc_motor_controllers[i], delta_time);
         }
     }
 {% endif %}
@@ -344,7 +450,7 @@ int mavlink_gen_update_all_devices(void) {
     /* Update RoboMaster motors */
     for (int i = 0; i < MAVLINK_GEN_ROBOMASTER_COUNT; i++) {
         if (robomaster_controllers[i]) {
-            robomaster_controller_update(robomaster_controllers[i]);
+            motor_update(robomaster_controllers[i], delta_time);
         }
     }
 {% endif %}
@@ -353,7 +459,7 @@ int mavlink_gen_update_all_devices(void) {
     /* Update RS485 motors */
     for (int i = 0; i < MAVLINK_GEN_RS485_MOTOR_COUNT; i++) {
         if (rs485_controllers[i]) {
-            rs485_controller_update(rs485_controllers[i]);
+            motor_update(rs485_controllers[i], delta_time);
         }
     }
 {% endif %}
@@ -370,8 +476,7 @@ void mavlink_gen_emergency_stop_all(void) {
     /* Stop servos */
     for (int i = 0; i < MAVLINK_GEN_SERVO_COUNT; i++) {
         if (servo_controllers[i]) {
-            servo_controller_set_angle(servo_controllers[i],
-                mavlink_gen_servo_configs[i].neutral_angle);
+            motor_emergency_stop(servo_controllers[i]);
         }
     }
 {% endif %}
@@ -380,7 +485,7 @@ void mavlink_gen_emergency_stop_all(void) {
     /* Stop DC motors */
     for (int i = 0; i < MAVLINK_GEN_DC_MOTOR_COUNT; i++) {
         if (dc_motor_controllers[i]) {
-            dc_motor_controller_set_duty_cycle(dc_motor_controllers[i], 0.0f);
+            motor_emergency_stop(dc_motor_controllers[i]);
         }
     }
 {% endif %}
@@ -389,7 +494,7 @@ void mavlink_gen_emergency_stop_all(void) {
     /* Stop RoboMaster motors */
     for (int i = 0; i < MAVLINK_GEN_ROBOMASTER_COUNT; i++) {
         if (robomaster_controllers[i]) {
-            robomaster_controller_set_current(robomaster_controllers[i], 0.0f);
+            motor_emergency_stop(robomaster_controllers[i]);
         }
     }
 {% endif %}
@@ -398,8 +503,65 @@ void mavlink_gen_emergency_stop_all(void) {
     /* Stop RS485 motors */
     for (int i = 0; i < MAVLINK_GEN_RS485_MOTOR_COUNT; i++) {
         if (rs485_controllers[i]) {
-            rs485_controller_set_velocity(rs485_controllers[i], 0.0f);
+            motor_emergency_stop(rs485_controllers[i]);
         }
     }
 {% endif %}
+}
+
+/* ========================================================================== */
+/*  UNIFIED MOTOR ACCESS                                                      */
+/* ========================================================================== */
+
+/**
+ * @brief Get motor controller by ID
+ * @param motor_id Motor ID (1-255)
+ * @return Pointer to motor controller, or NULL if not found
+ */
+motor_controller_t* mavlink_gen_get_controller_by_id(uint8_t motor_id) {
+{% if servo_count > 0 %}
+    /* Servo motors: 1-9 */
+    if (motor_id >= 1 && motor_id <= 9) {
+        for (int i = 0; i < MAVLINK_GEN_SERVO_COUNT; i++) {
+            if (servo_controllers[i] && servo_controllers[i]->id == motor_id) {
+                return servo_controllers[i];
+            }
+        }
+    }
+{% endif %}
+
+{% if dc_motor_count > 0 %}
+    /* DC motors: 10-15 */
+    if (motor_id >= 10 && motor_id <= 15) {
+        for (int i = 0; i < MAVLINK_GEN_DC_MOTOR_COUNT; i++) {
+            if (dc_motor_controllers[i] && dc_motor_controllers[i]->id == motor_id) {
+                return dc_motor_controllers[i];
+            }
+        }
+    }
+{% endif %}
+
+{% if robomaster_count > 0 %}
+    /* RoboMaster motors: 20-29 */
+    if (motor_id >= 20 && motor_id <= 29) {
+        for (int i = 0; i < MAVLINK_GEN_ROBOMASTER_COUNT; i++) {
+            if (robomaster_controllers[i] && robomaster_controllers[i]->id == motor_id) {
+                return robomaster_controllers[i];
+            }
+        }
+    }
+{% endif %}
+
+{% if rs485_motor_count > 0 %}
+    /* RS485 motors: 30-49 */
+    if (motor_id >= 30 && motor_id <= 49) {
+        for (int i = 0; i < MAVLINK_GEN_RS485_MOTOR_COUNT; i++) {
+            if (rs485_controllers[i] && rs485_controllers[i]->id == motor_id) {
+                return rs485_controllers[i];
+            }
+        }
+    }
+{% endif %}
+
+    return NULL;
 }

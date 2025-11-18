@@ -5,9 +5,14 @@
 
 #include "parameter_manager.h"
 #include "motor_config.h"
-#include "../motors/motor_registry.h"
+#include "mavlink_generated_config.h"
+#include "../motors/robomaster_controller.h"
+#include "../motors/dc_controller.h"
 #include <string.h>
 #include <stdio.h>
+
+/* External function from generated code */
+extern motor_controller_t* mavlink_gen_get_controller_by_id(uint8_t motor_id);
 
 /* ============================================================================
  * Global Parameter Manager
@@ -327,7 +332,7 @@ error_code_t param_manager_register_motor_params(void) {
     // RoboMaster motor parameters
     for (int i = 0; i < MAX_ROBOMASTER; i++) {
         const robomaster_config_t* config = &ROBOMASTER_CONFIGS[i];
-        motor_controller_t* controller = motor_registry_get(config->id);
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(config->id);
 
         if (controller && controller->type == MOTOR_TYPE_ROBOMASTER) {
             robomaster_private_t* priv = (robomaster_private_t*)controller->private_data;
@@ -370,7 +375,7 @@ error_code_t param_manager_register_motor_params(void) {
     // DC motor parameters
     for (int i = 0; i < MAX_DC_MOTORS; i++) {
         const dc_motor_config_t* config = &DC_MOTOR_CONFIGS[i];
-        motor_controller_t* controller = motor_registry_get(config->id);
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(config->id);
 
         if (controller && controller->type == MOTOR_TYPE_DC) {
             dc_motor_private_t* priv = (dc_motor_private_t*)controller->private_data;

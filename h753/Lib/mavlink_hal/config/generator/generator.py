@@ -113,10 +113,17 @@ class CodeGenerator:
         self.jinja_env.filters['to_upper'] = lambda s: s.upper()
         self.jinja_env.filters['to_hex'] = lambda n: f"0x{n:X}"
         self.jinja_env.filters['format_float'] = lambda f: f"{f:.6f}f"
+        self.jinja_env.filters['uart_to_number'] = self._uart_to_number
 
     def _to_c_identifier(self, s: str) -> str:
         """Convert string to valid C identifier"""
         return s.replace('-', '_').replace(' ', '_').replace('.', '_')
+
+    def _uart_to_number(self, uart_name: str) -> int:
+        """Extract UART number from name (e.g., 'USART1' -> 1, 'UART2' -> 2)"""
+        import re
+        match = re.search(r'(\d+)', str(uart_name))
+        return int(match.group(1)) if match else 1
 
     def _load_schema(self) -> Dict:
         """Load and parse JSON schema"""

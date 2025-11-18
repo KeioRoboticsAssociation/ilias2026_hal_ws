@@ -14,21 +14,21 @@
 #include "mavlink_generated_config.h"
 #include "mavlink_generated_params.h"
 
-/* Include MAVLink library */
-#include "mavlink/c_library_v2/common/mavlink.h"
+/* Include MAVLink library (robomaster_motor dialect includes common) */
+#include "robomaster_motor/mavlink.h"
 
 /* Include motor controllers */
 {% if servo_count > 0 %}
-#include "App/motors/servo_controller.h"
+#include "motors/servo_controller.h"
 {% endif %}
 {% if dc_motor_count > 0 %}
-#include "App/motors/dc_controller.h"
+#include "motors/dc_controller.h"
 {% endif %}
 {% if robomaster_count > 0 %}
-#include "App/motors/robomaster_controller.h"
+#include "motors/robomaster_controller.h"
 {% endif %}
 {% if rs485_motor_count > 0 %}
-#include "App/motors/rs485_controller.h"
+#include "motors/rs485_controller.h"
 {% endif %}
 
 #include <string.h>
@@ -47,42 +47,45 @@ void mavlink_gen_handle_rc_channels_override(const mavlink_message_t* msg) {
     mavlink_rc_channels_override_t rc;
     mavlink_msg_rc_channels_override_decode(msg, &rc);
 
-    /* RC channels 1-8 map to device IDs 1-8 (typically servos) */
+    /* RC channels 1-8 map to motor IDs 1-8 */
     uint16_t channels[8] = {
         rc.chan1_raw, rc.chan2_raw, rc.chan3_raw, rc.chan4_raw,
         rc.chan5_raw, rc.chan6_raw, rc.chan7_raw, rc.chan8_raw
     };
 
-{% if servo_count > 0 %}
-    /* Map to servos (IDs 1-9) */
-    for (int i = 0; i < MAVLINK_GEN_SERVO_COUNT && i < 8; i++) {
-        uint8_t device_id = mavlink_gen_servo_configs[i].id;
+    for (int i = 0; i < 8; i++) {
+        uint16_t pwm = channels[i];
+        uint8_t motor_id = i + 1;  /* Motor IDs 1-8 */
 
-        if (device_id >= 1 && device_id <= 8) {
-            uint16_t pwm = channels[device_id - 1];
-
-            if (pwm >= 1000 && pwm <= 2000) {
-                /* Convert PWM to angle */
-                float angle = mavlink_gen_servo_configs[i].min_angle +
-                    (pwm - 1000) * (mavlink_gen_servo_configs[i].max_angle -
-                                     mavlink_gen_servo_configs[i].min_angle) / 1000.0f;
-
-                /* Set servo angle (implementation-specific) */
-                /* servo_controller_set_angle(servo_controllers[i], angle); */
-            }
+        /* Skip disabled channels */
+        if (pwm == 0 || pwm == UINT16_MAX) {
+            continue;
         }
-    }
-{% endif %}
 
-{% if dc_motor_count > 0 %}
-    /* Map to DC motors (IDs 10-15) */
-    for (int i = 0; i < MAVLINK_GEN_DC_MOTOR_COUNT && i < 6; i++) {
-        uint8_t device_id = mavlink_gen_dc_motor_configs[i].id;
+        /* Get controller using unified interface */
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
+        if (!controller || !controller->vtable || !controller->vtable->set_command) {
+            continue;
+        }
 
-        /* DC motors could use extended channels or custom mapping */
-        /* Implementation depends on your specific requirements */
+        /* Convert PWM (1000-2000) to normalized value (-1.0 to +1.0) */
+        float normalized = (pwm - 1500) / 500.0f;
+
+        /* Clamp to valid range */
+        if (normalized > 1.0f) normalized = 1.0f;
+        if (normalized < -1.0f) normalized = -1.0f;
+
+        /* Create motor command (duty cycle mode for RC control) */
+        motor_command_t cmd = {
+            .motor_id = motor_id,
+            .enable = true,
+            .mode = CONTROL_MODE_DUTY_CYCLE,
+            .target_value = normalized,
+        };
+
+        /* Send command via vtable */
+        controller->vtable->set_command(controller, &cmd);
     }
-{% endif %}
 }
 
 /* ========================================================================== */
@@ -131,87 +134,26 @@ void mavlink_gen_handle_manual_control(const mavlink_message_t* msg) {
  * Control modes: 0=position, 1=velocity, 2=current, 3=duty_cycle
  */
 void mavlink_gen_handle_motor_command(const mavlink_message_t* msg) {
-    /* Decode custom MOTOR_COMMAND message */
-    uint8_t motor_id;
-    uint8_t control_mode;
-    float target_value;
-    uint8_t enable;
+    /* Decode MOTOR_COMMAND message using MAVLink decode function */
+    mavlink_motor_command_t motor_cmd_msg;
+    mavlink_msg_motor_command_decode(msg, &motor_cmd_msg);
 
-    /* Extract fields from message payload */
-    /* This assumes MOTOR_COMMAND is defined in your custom MAVLink dialect */
-    motor_id = msg->payload[0];
-    control_mode = msg->payload[1];
-    enable = msg->payload[2];
-    memcpy(&target_value, &msg->payload[3], sizeof(float));
-
-    if (!enable) {
-        /* Disable motor - set to neutral/stop */
-        /* Implementation-specific */
-        return;
+    /* Get controller using unified interface */
+    motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_cmd_msg.motor_id);
+    if (!controller || !controller->vtable || !controller->vtable->set_command) {
+        return;  /* Motor not found or invalid */
     }
 
-{% if servo_count > 0 %}
-    /* Handle servo motors (IDs 1-9) */
-    for (int i = 0; i < MAVLINK_GEN_SERVO_COUNT; i++) {
-        if (mavlink_gen_servo_configs[i].id == motor_id) {
-            if (control_mode == 0) {  /* Position mode */
-                /* servo_controller_set_angle(servo_controllers[i], target_value); */
-            }
-            return;
-        }
-    }
-{% endif %}
+    /* Create motor command */
+    motor_command_t cmd = {
+        .motor_id = motor_cmd_msg.motor_id,
+        .enable = motor_cmd_msg.enable ? true : false,
+        .mode = (control_mode_t)motor_cmd_msg.control_mode,
+        .target_value = motor_cmd_msg.target_value,
+    };
 
-{% if dc_motor_count > 0 %}
-    /* Handle DC motors (IDs 10-15) */
-    for (int i = 0; i < MAVLINK_GEN_DC_MOTOR_COUNT; i++) {
-        if (mavlink_gen_dc_motor_configs[i].id == motor_id) {
-            switch (control_mode) {
-                case 1:  /* Velocity mode */
-                    /* dc_motor_controller_set_speed(dc_motor_controllers[i], target_value); */
-                    break;
-                case 3:  /* Duty cycle mode */
-                    /* dc_motor_controller_set_duty_cycle(dc_motor_controllers[i], target_value); */
-                    break;
-            }
-            return;
-        }
-    }
-{% endif %}
-
-{% if robomaster_count > 0 %}
-    /* Handle RoboMaster motors (IDs 20-29) */
-    for (int i = 0; i < MAVLINK_GEN_ROBOMASTER_COUNT; i++) {
-        if (mavlink_gen_robomaster_configs[i].id == motor_id) {
-            switch (control_mode) {
-                case 1:  /* Velocity mode */
-                    /* robomaster_controller_set_speed(robomaster_controllers[i], target_value); */
-                    break;
-                case 2:  /* Current mode */
-                    /* robomaster_controller_set_current(robomaster_controllers[i], target_value); */
-                    break;
-            }
-            return;
-        }
-    }
-{% endif %}
-
-{% if rs485_motor_count > 0 %}
-    /* Handle RS485 motors (IDs 30-49) */
-    for (int i = 0; i < MAVLINK_GEN_RS485_MOTOR_COUNT; i++) {
-        if (mavlink_gen_rs485_configs[i].id == motor_id) {
-            switch (control_mode) {
-                case 0:  /* Position mode */
-                    /* rs485_controller_set_position(rs485_controllers[i], target_value); */
-                    break;
-                case 1:  /* Velocity mode */
-                    /* rs485_controller_set_velocity(rs485_controllers[i], target_value); */
-                    break;
-            }
-            return;
-        }
-    }
-{% endif %}
+    /* Send command via vtable */
+    controller->vtable->set_command(controller, &cmd);
 }
 
 /* ========================================================================== */
