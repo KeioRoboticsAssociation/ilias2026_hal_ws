@@ -84,5 +84,21 @@
             <field type="float" name="target_value">Target value (units depend on control_mode)</field>
             <field type="uint8_t" name="enable">Enable motor (0=disable, 1=enable)</field>
         </message>
+
+        <!-- RS485 Motor Status Message -->
+        <message id="12005" name="RS485_MOTOR_STATUS">
+            <description>Status feedback from RS485 motor (Ikeya MD protocol)</description>
+            <field type="uint8_t" name="motor_id">Motor ID (30-49 for RS485 motors)</field>
+            <field type="uint8_t" name="device_id">RS485 board device ID (DIP switch setting)</field>
+            <field type="uint8_t" name="motor_index">Motor index on board (0-2 for 3-motor boards)</field>
+            <field type="uint8_t" name="control_mode">Control mode (0=position, 1=velocity)</field>
+            <field type="uint8_t" name="status">Motor status (0=OK, 1=ERROR, 2=TIMEOUT, 3=NOT_INITIALIZED)</field>
+            <field type="uint8_t" name="error_code">RS485 protocol error code (0=no error)</field>
+            <field type="float" name="current_position_rotations">Current position in rotations</field>
+            <field type="float" name="current_velocity_rps">Current velocity in revolutions per second</field>
+            <field type="float" name="target_velocity_rps">Target velocity in revolutions per second</field>
+            <field type="float" name="acceleration_rps2">Acceleration setting in rev/s^2</field>
+            <field type="uint32_t" name="timestamp_ms">Timestamp in milliseconds</field>
+        </message>
     </messages>
 </mavlink>

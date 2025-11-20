@@ -32,6 +32,7 @@
 #include "../../App/comm/mavlink_udp.h"
 #include "../../App/hal/hardware_manager.h"
 #include "../../App/motors/robomaster_controller.h"
+#include "../../App/motors/rs485_controller.h"
 #include "../../App/config/parameter_manager.h"
 
 /* Generated MAVLink HAL code - replaces motor_registry */
@@ -500,6 +501,102 @@ void StartDefaultTask(void const * argument)
           mavlink_udp_send_message(&mavlink_handler, &msg);
         }
       }
+
+      // Send status for all active DC motors (IDs 10-15)
+      for (uint8_t motor_id = 10; motor_id < 16; motor_id++) {
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
+        if (controller && controller->type == MOTOR_TYPE_DC) {
+          motor_state_t state = motor_get_state(controller);
+
+          // Send DC_MOTOR_STATUS message
+          mavlink_message_t msg;
+          mavlink_msg_dc_motor_status_pack(
+            mavlink_handler.config.system_id,
+            mavlink_handler.config.component_id,
+            &msg,
+            motor_id,                                    // motor_id
+            1,                                           // control_mode (0=position, 1=velocity, 2=duty_cycle)
+            (uint8_t)state.status,                       // status
+            state.current_position,                      // position_rad
+            state.current_velocity,                      // speed_rad_s
+            0.0f,                                        // duty_cycle (not applicable for DC motor)
+            (state.target_position - state.current_position), // position_error_rad
+            state.target_velocity,                       // target_value
+            current_time                                 // timestamp_ms
+          );
+          mavlink_udp_send_message(&mavlink_handler, &msg);
+        }
+      }
+
+      // Send status for all active Servo motors (IDs 1-9)
+      // Collect all servo positions and send as SERVO_OUTPUT_RAW
+      uint16_t servo_raw[16] = {0}; // MAVLink SERVO_OUTPUT_RAW supports up to 16 servos
+      bool has_servos = false;
+
+      for (uint8_t motor_id = 1; motor_id < 10; motor_id++) {
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
+        if (controller && controller->type == MOTOR_TYPE_SERVO) {
+          motor_state_t state = motor_get_state(controller);
+          has_servos = true;
+
+          // Map angle (radians) to PWM (1000-2000 us)
+          // Assuming -π/2 to +π/2 range maps to 1000-2000 us
+          float angle_normalized = (state.current_position + 1.57079632f) / 3.14159265f; // 0.0 to 1.0
+          servo_raw[motor_id - 1] = (uint16_t)(1000 + angle_normalized * 1000.0f);
+        }
+      }
+
+      // Send SERVO_OUTPUT_RAW if any servos are active
+      if (has_servos) {
+        mavlink_message_t msg;
+        mavlink_msg_servo_output_raw_pack(
+          mavlink_handler.config.system_id,
+          mavlink_handler.config.component_id,
+          &msg,
+          current_time * 1000,  // time_usec (convert ms to us)
+          0,                    // port (servo port 0)
+          servo_raw[0],  servo_raw[1],  servo_raw[2],  servo_raw[3],
+          servo_raw[4],  servo_raw[5],  servo_raw[6],  servo_raw[7],
+          servo_raw[8],  servo_raw[9],  servo_raw[10], servo_raw[11],
+          servo_raw[12], servo_raw[13], servo_raw[14], servo_raw[15]
+        );
+        mavlink_udp_send_message(&mavlink_handler, &msg);
+      }
+
+      // Send status for all active RS485 motors (IDs 30-49)
+      for (uint8_t motor_id = 30; motor_id < 50; motor_id++) {
+        motor_controller_t* controller = mavlink_gen_get_controller_by_id(motor_id);
+        if (controller && controller->type == MOTOR_TYPE_RS485) {
+          motor_state_t state = motor_get_state(controller);
+
+          // Extract RS485-specific information from private data
+          rs485_private_t* rs485_data = (rs485_private_t*)controller->private_data;
+          uint8_t device_id = rs485_data->config.rs485_device_id;
+          uint8_t motor_index = rs485_data->motor_index;
+          uint8_t control_mode = (rs485_data->config.control_mode == RS485_MODE_VELOCITY) ? 1 : 0;
+
+          // Send RS485_MOTOR_STATUS message (custom message ID 12005)
+          mavlink_message_t msg;
+          mavlink_msg_rs485_motor_status_pack(
+            mavlink_handler.config.system_id,
+            mavlink_handler.config.component_id,
+            &msg,
+            motor_id,                                    // motor_id
+            device_id,                                   // device_id (DIP switch)
+            motor_index,                                 // motor_index (0-2)
+            control_mode,                                // control_mode (0=position, 1=velocity)
+            (uint8_t)state.status,                       // status
+            0,                                           // error_code (future: from RS485 protocol)
+            state.current_position,                      // current_position_rotations
+            state.current_velocity,                      // current_velocity_rps
+            state.target_velocity,                       // target_velocity_rps
+            rs485_data->config.max_acceleration_rps2,    // acceleration_rps2
+            current_time                                 // timestamp_ms
+          );
+          mavlink_udp_send_message(&mavlink_handler, &msg);
+        }
+      }
+
       last_motor_status_time = current_time;
     }
 

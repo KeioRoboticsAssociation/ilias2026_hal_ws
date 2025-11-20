@@ -107,6 +107,11 @@ error_code_t rs485_read_status(motor_controller_t* controller) {
 
     rs485_private_t* priv = (rs485_private_t*)controller->private_data;
 
+    // Validate device ID is in valid range (1-9)
+    if (priv->config.rs485_device_id == 0 || priv->config.rs485_device_id > 9) {
+        return ERROR_CONFIG_ERROR;
+    }
+
     // Prepare READ request packet
     rs485_read_request_t read_packet;
     read_packet.header = RS485_HEADER_READ_REQUEST;
@@ -195,6 +200,11 @@ error_code_t rs485_write_command(motor_controller_t* controller, const motor_com
 
     rs485_private_t* priv = (rs485_private_t*)controller->private_data;
     uint8_t idx = priv->motor_index;  // Motor index on the board (0-2)
+
+    // Validate device ID is in valid range (1-9)
+    if (priv->config.rs485_device_id == 0 || priv->config.rs485_device_id > 9) {
+        return ERROR_CONFIG_ERROR;
+    }
 
     uint8_t tx_buffer[16];
     uint8_t response_buffer[16];
@@ -611,11 +621,21 @@ error_code_t rs485_controller_create(
         return ERROR_INVALID_PARAMETER;
     }
 
+    // Validate RS485 device ID is in valid range (1-9)
+    if (config->rs485_device_id == 0 || config->rs485_device_id > 9) {
+        return ERROR_CONFIG_ERROR;
+    }
+
+    // Validate motor index is in valid range (0-2 for 3 motors per board)
+    if (config->motor_index > 2) {
+        return ERROR_CONFIG_ERROR;
+    }
+
     // Initialize controller base
     memset(controller, 0, sizeof(motor_controller_t));
     controller->vtable = &rs485_vtable;
     controller->id = id;
-    controller->type = MOTOR_TYPE_DC;  // Reuse DC type for now
+    controller->type = MOTOR_TYPE_RS485;  // Correct RS485 motor type
     controller->private_data = private_data;
 
     // Initialize private data
